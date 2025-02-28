@@ -1,0 +1,162 @@
+{
+  "alerts": [
+    {
+      "name": "frontend_page_load_time_warning",
+      "description": "Warning alert for frontend page load time exceeding threshold",
+      "severity": "warning",
+      "metric": "page_load_time",
+      "threshold": 3,
+      "unit": "seconds",
+      "duration": "5m",
+      "component": "Frontend",
+      "notify": ["sms", "email"],
+      "response_time": "30m",
+      "runbook_url": "/docs/operations/incident-response.md#frontend-performance",
+      "annotations": {
+        "summary": "Frontend page load time is slow",
+        "description": "Frontend page load time is exceeding 3 seconds for over 5 minutes, indicating potential performance issues that may impact user experience."
+      }
+    },
+    {
+      "name": "api_gateway_error_rate_warning",
+      "description": "Warning alert for API Gateway error rate exceeding threshold",
+      "severity": "warning",
+      "metric": "error_rate_percentage",
+      "threshold": 1,
+      "unit": "percent",
+      "duration": "5m",
+      "component": "API Gateway",
+      "notify": ["sms", "email"],
+      "response_time": "30m",
+      "runbook_url": "/docs/operations/incident-response.md#api-errors",
+      "annotations": {
+        "summary": "API Gateway error rate elevated",
+        "description": "API Gateway error rate is above 1% for over 5 minutes. Check logs for error patterns and potential service degradation."
+      }
+    },
+    {
+      "name": "api_gateway_response_time_warning",
+      "description": "Warning alert for API Gateway response time exceeding threshold",
+      "severity": "warning",
+      "metric": "response_time",
+      "threshold": 500,
+      "unit": "milliseconds",
+      "duration": "5m",
+      "component": "API Gateway",
+      "notify": ["sms", "email"],
+      "response_time": "30m",
+      "runbook_url": "/docs/operations/incident-response.md#api-performance",
+      "annotations": {
+        "summary": "API Gateway response time elevated",
+        "description": "API Gateway response time is above 500ms for over 5 minutes. Check for performance bottlenecks and increased load."
+      }
+    },
+    {
+      "name": "document_service_cpu_warning",
+      "description": "Warning alert for Document Service CPU usage exceeding threshold",
+      "severity": "warning",
+      "metric": "cpu_utilization_percent",
+      "threshold": 70,
+      "unit": "percent",
+      "duration": "10m",
+      "component": "Document Service",
+      "notify": ["sms", "email"],
+      "response_time": "30m",
+      "runbook_url": "/docs/operations/incident-response.md#document-service",
+      "annotations": {
+        "summary": "Document Service CPU usage high",
+        "description": "Document Service CPU usage is above 70% for over 10 minutes. Auto-scaling should be triggered but verify proper scaling is occurring."
+      },
+      "auto_remediation": "Auto-scale"
+    },
+    {
+      "name": "ai_service_queue_depth_warning",
+      "description": "Warning alert for AI Service queue depth exceeding threshold",
+      "severity": "warning",
+      "metric": "queue_depth",
+      "threshold": 50,
+      "unit": "items",
+      "duration": "5m",
+      "component": "AI Service",
+      "notify": ["sms", "email"],
+      "response_time": "30m",
+      "runbook_url": "/docs/operations/incident-response.md#ai-service",
+      "annotations": {
+        "summary": "AI Service queue depth high",
+        "description": "AI Service queue depth is above 50 items for over 5 minutes. Check for increased load and verify auto-scaling is functioning."
+      },
+      "auto_remediation": "Auto-scale"
+    },
+    {
+      "name": "ai_service_completion_time_warning",
+      "description": "Warning alert for AI Service completion time exceeding threshold",
+      "severity": "warning",
+      "metric": "completion_time",
+      "threshold": 5,
+      "unit": "seconds",
+      "duration": "5m",
+      "component": "AI Service",
+      "notify": ["sms", "email"],
+      "response_time": "30m",
+      "runbook_url": "/docs/operations/incident-response.md#ai-performance",
+      "annotations": {
+        "summary": "AI Service completion time slow",
+        "description": "AI Service completion time is above 5 seconds for over 5 minutes. Check OpenAI API performance and token optimization."
+      }
+    },
+    {
+      "name": "database_connection_count_warning",
+      "description": "Warning alert for Database connection count exceeding threshold",
+      "severity": "warning",
+      "metric": "connection_count_percent",
+      "threshold": 80,
+      "unit": "percent",
+      "duration": "5m",
+      "component": "Database",
+      "notify": ["sms", "email"],
+      "response_time": "30m",
+      "runbook_url": "/docs/operations/incident-response.md#database",
+      "annotations": {
+        "summary": "Database connection count high",
+        "description": "Database connection count is above 80% of capacity for over 5 minutes. Review connection pooling settings and check for connection leaks."
+      },
+      "auto_remediation": "Connection pooling adjustment"
+    },
+    {
+      "name": "user_service_auth_failures_warning",
+      "description": "Warning alert for User Service authentication failures exceeding threshold",
+      "severity": "warning",
+      "metric": "auth_failures",
+      "threshold": 10,
+      "unit": "count_per_minute",
+      "duration": "5m",
+      "component": "User Service",
+      "notify": ["sms", "email"],
+      "response_time": "30m",
+      "runbook_url": "/docs/operations/incident-response.md#authentication",
+      "annotations": {
+        "summary": "User Service authentication failures elevated",
+        "description": "User Service is experiencing more than 10 authentication failures per minute for over 5 minutes. Check for potential security incidents or service issues."
+      },
+      "auto_remediation": "Temporary rate limiting"
+    }
+  ],
+  "notification_config": {
+    "email": {
+      "recipients": ["operations@example.com", "oncall@example.com"],
+      "template": "warning_alert_template",
+      "include_runbook": true
+    },
+    "sms": {
+      "recipients": ["oncall_phone_number"],
+      "template": "warning_alert_sms",
+      "maximum_frequency": "30m"
+    }
+  },
+  "grouping_rules": {
+    "group_by": ["component", "severity"],
+    "group_wait": "30s",
+    "group_interval": "5m",
+    "repeat_interval": "30m"
+  }
+}
