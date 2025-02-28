@@ -1,0 +1,97 @@
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Distribution / packaging
+build/
+dist/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+.Python
+develop-eggs/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.whl
+
+# Virtual environments
+venv/
+env/
+ENV/
+.env
+.venv
+env.bak/
+venv.bak/
+virtualenv/
+
+# Flask specific
+instance/
+.webassets-cache
+flask_session/
+
+# Database files
+mongodb_data/
+dump.rdb
+*.rdb
+*.sqlite3
+*.db
+
+# Sensitive credentials and configuration
+.env
+*.pem
+*.key
+openai_credentials.json
+openai_api_key.txt
+aws_credentials.json
+.aws/
+secrets/
+
+# IDE and editor files
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.project
+.pydevproject
+.settings/
+*.sublime-workspace
+*.sublime-project
+
+# Operating system files
+.DS_Store
+Thumbs.db
+.directory
+desktop.ini
+
+# Testing and coverage files
+.coverage
+htmlcov/
+.pytest_cache/
+.tox/
+coverage.xml
+*.cover
+.hypothesis/
+nosetests.xml
+.coverage.*
+
+# Log files
+logs/
+*.log
+npm-debug.log*
+
+# Temporary files
+*.tmp
+*.bak
+*.swp
+*.pid
+*.seed
+*.pid.lock
