@@ -1,0 +1,942 @@
+openapi: 3.0.0
+info:
+  title: AI Writing Enhancement API
+  description: API for the AI-powered writing enhancement interface that enables users to improve written content through intelligent suggestions and edits
+  version: 1.0.0
+  contact:
+    name: API Support
+    email: support@example.com
+  license:
+    name: Proprietary
+    url: https://example.com/license
+servers:
+  - url: https://api.example.com/v1
+    description: Production server
+  - url: https://staging-api.example.com/v1
+    description: Staging server
+  - url: https://dev-api.example.com/v1
+    description: Development server
+  - url: http://localhost:5000/v1
+    description: Local development server
+tags:
+  - name: health
+    description: Health check endpoints
+  - name: auth
+    description: Authentication and user management
+  - name: documents
+    description: Document management operations
+  - name: suggestions
+    description: AI-powered writing suggestions
+  - name: chat
+    description: AI chat interface for document improvements
+  - name: templates
+    description: Predefined improvement templates
+  - name: users
+    description: User profile management
+paths:
+  /health/liveness:
+    get:
+      tags:
+        - health
+      summary: Basic health check
+      description: Checks if the API server is running
+      operationId: getHealthLiveness
+      responses:
+        '200':
+          description: API server is running
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+  /health/readiness:
+    get:
+      tags:
+        - health
+      summary: Dependency health check
+      description: Checks if all dependencies (database, AI service, etc.) are available
+      operationId: getHealthReadiness
+      responses:
+        '200':
+          description: All dependencies are available
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+        '503':
+          description: One or more dependencies are unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /auth/login:
+    post:
+      tags:
+        - auth
+      summary: User login
+      description: Authenticate a user and return JWT tokens
+      operationId: loginUser
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        '400':
+          description: Invalid credentials
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '429':
+          description: Too many login attempts
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /auth/register:
+    post:
+      tags:
+        - auth
+      summary: User registration
+      description: Register a new user account
+      operationId: registerUser
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterRequest'
+      responses:
+        '201':
+          description: Registration successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        '400':
+          description: Invalid registration data
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Email already in use
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /auth/refresh:
+    post:
+      tags:
+        - auth
+      summary: Refresh authentication token
+      description: Use refresh token to get a new access token
+      operationId: refreshToken
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RefreshRequest'
+      responses:
+        '200':
+          description: Token refresh successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        '401':
+          description: Invalid or expired refresh token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /auth/logout:
+    post:
+      tags:
+        - auth
+      summary: User logout
+      description: Invalidate the user's refresh token
+      operationId: logoutUser
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Logout successful
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: Logout successful
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /documents:
+    get:
+      tags:
+        - documents
+      summary: List user documents
+      description: Retrieve a list of documents belonging to the authenticated user
+      operationId: listDocuments
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: page
+          in: query
+          description: Page number for pagination
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: limit
+          in: query
+          description: Number of items per page
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+        - name: sort
+          in: query
+          description: Sort field
+          required: false
+          schema:
+            type: string
+            enum: [title, createdAt, updatedAt]
+            default: updatedAt
+        - name: order
+          in: query
+          description: Sort order
+          required: false
+          schema:
+            type: string
+            enum: [asc, desc]
+            default: desc
+      responses:
+        '200':
+          description: List of documents
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DocumentListResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    post:
+      tags:
+        - documents
+      summary: Create a document
+      description: Create a new document with the provided content
+      operationId: createDocument
+      security:
+        - bearerAuth: []
+        - {}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DocumentCreateRequest'
+      responses:
+        '201':
+          description: Document created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DocumentResponse'
+        '400':
+          description: Invalid document data
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /documents/{id}:
+    get:
+      tags:
+        - documents
+      summary: Get document by ID
+      description: Retrieve a specific document by its ID
+      operationId: getDocument
+      security:
+        - bearerAuth: []
+        - {}
+      parameters:
+        - name: id
+          in: path
+          description: Document ID
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Document retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DocumentResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Document not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    put:
+      tags:
+        - documents
+      summary: Update document
+      description: Update an existing document
+      operationId: updateDocument
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          description: Document ID
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DocumentUpdateRequest'
+      responses:
+        '200':
+          description: Document updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DocumentResponse'
+        '400':
+          description: Invalid document data
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Document not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    delete:
+      tags:
+        - documents
+      summary: Delete document
+      description: Delete a document by its ID
+      operationId: deleteDocument
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          description: Document ID
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Document deleted successfully
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Document not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /suggestions:
+    post:
+      tags:
+        - suggestions
+      summary: Generate AI suggestions
+      description: Process document content and generate AI-powered improvement suggestions
+      operationId: generateSuggestions
+      security:
+        - bearerAuth: []
+        - {}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SuggestionRequest'
+      responses:
+        '200':
+          description: Suggestions generated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuggestionResponse'
+        '400':
+          description: Invalid request data
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '429':
+          description: Rate limit exceeded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /chat/message:
+    post:
+      tags:
+        - chat
+      summary: Send chat message
+      description: Send a message to the AI chat assistant
+      operationId: sendChatMessage
+      security:
+        - bearerAuth: []
+        - {}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChatMessageRequest'
+      responses:
+        '200':
+          description: AI response received
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChatMessageResponse'
+        '400':
+          description: Invalid message
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '429':
+          description: Rate limit exceeded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /templates:
+    get:
+      tags:
+        - templates
+      summary: List templates
+      description: Retrieve a list of available improvement templates
+      operationId: listTemplates
+      security:
+        - bearerAuth: []
+        - {}
+      parameters:
+        - name: category
+          in: query
+          description: Filter templates by category
+          required: false
+          schema:
+            type: string
+      responses:
+        '200':
+          description: List of templates
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TemplateListResponse'
+  /users/me:
+    get:
+      tags:
+        - users
+      summary: Get current user
+      description: Retrieve information about the authenticated user
+      operationId: getCurrentUser
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: User information retrieved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+components:
+  schemas:
+    HealthResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          example: healthy
+        timestamp:
+          type: string
+          format: date-time
+        version:
+          type: string
+          example: 1.0.0
+        details:
+          type: object
+          additionalProperties:
+            type: string
+          example:
+            database: connected
+            redis: connected
+            ai_service: connected
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+          example: Bad Request
+        message:
+          type: string
+          example: Invalid input data
+        details:
+          type: object
+          nullable: true
+          example:
+            email: Email is required
+        status_code:
+          type: integer
+          example: 400
+        timestamp:
+          type: string
+          format: date-time
+    LoginRequest:
+      type: object
+      required:
+        - email
+        - password
+      properties:
+        email:
+          type: string
+          format: email
+          example: user@example.com
+        password:
+          type: string
+          format: password
+          example: securePassword123
+        remember_me:
+          type: boolean
+          default: false
+    RegisterRequest:
+      type: object
+      required:
+        - email
+        - password
+        - firstName
+        - lastName
+      properties:
+        email:
+          type: string
+          format: email
+          example: user@example.com
+        password:
+          type: string
+          format: password
+          example: securePassword123
+          minLength: 10
+        firstName:
+          type: string
+          example: John
+        lastName:
+          type: string
+          example: Doe
+    RefreshRequest:
+      type: object
+      required:
+        - refreshToken
+      properties:
+        refreshToken:
+          type: string
+          example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+    AuthResponse:
+      type: object
+      properties:
+        accessToken:
+          type: string
+          example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+        refreshToken:
+          type: string
+          example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+        expiresIn:
+          type: integer
+          example: 3600
+        user:
+          $ref: '#/components/schemas/UserResponse'
+    DocumentCreateRequest:
+      type: object
+      required:
+        - title
+        - content
+      properties:
+        title:
+          type: string
+          example: Project Proposal
+        content:
+          type: string
+          example: This is the content of the document.
+        description:
+          type: string
+          example: A proposal for the new project
+        tags:
+          type: array
+          items:
+            type: string
+          example:
+            - proposal
+            - project
+    DocumentUpdateRequest:
+      type: object
+      properties:
+        title:
+          type: string
+          example: Updated Project Proposal
+        content:
+          type: string
+          example: This is the updated content of the document.
+        description:
+          type: string
+          example: An updated proposal for the new project
+        tags:
+          type: array
+          items:
+            type: string
+          example:
+            - proposal
+            - project
+            - updated
+        isArchived:
+          type: boolean
+          example: false
+    DocumentResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          example: 5f7b5d8a9f4b3a2c1d0e9f8a
+        title:
+          type: string
+          example: Project Proposal
+        content:
+          type: string
+          example: This is the content of the document.
+        description:
+          type: string
+          example: A proposal for the new project
+        tags:
+          type: array
+          items:
+            type: string
+          example:
+            - proposal
+            - project
+        userId:
+          type: string
+          nullable: true
+          example: 5f7b5d8a9f4b3a2c1d0e9f8b
+        sessionId:
+          type: string
+          nullable: true
+          example: sess_5f7b5d8a9f4b3a2c1d0e9f8c
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        lastAccessedAt:
+          type: string
+          format: date-time
+        isArchived:
+          type: boolean
+          example: false
+        currentVersionId:
+          type: string
+          example: 5f7b5d8a9f4b3a2c1d0e9f8d
+        wordCount:
+          type: integer
+          example: 256
+    DocumentListResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/DocumentResponse'
+        total:
+          type: integer
+          example: 15
+        page:
+          type: integer
+          example: 1
+        limit:
+          type: integer
+          example: 20
+        pages:
+          type: integer
+          example: 1
+    SuggestionRequest:
+      type: object
+      required:
+        - content
+        - promptType
+      properties:
+        content:
+          type: string
+          example: This is the document content that needs improvement.
+        promptType:
+          type: string
+          example: make_shorter
+        documentId:
+          type: string
+          nullable: true
+          example: 5f7b5d8a9f4b3a2c1d0e9f8a
+        selectedText:
+          type: string
+          nullable: true
+          example: This is the selected text for targeted improvement.
+        customPrompt:
+          type: string
+          nullable: true
+          example: Make this more persuasive
+    SuggestionItem:
+      type: object
+      properties:
+        id:
+          type: string
+          example: sugg_1
+        originalText:
+          type: string
+          example: This is the original text.
+        suggestedText:
+          type: string
+          example: This is the improved text.
+        explanation:
+          type: string
+          example: Changed for clarity and conciseness.
+        category:
+          type: string
+          example: clarity
+        startIndex:
+          type: integer
+          example: 0
+        endIndex:
+          type: integer
+          example: 24
+    SuggestionResponse:
+      type: object
+      properties:
+        suggestions:
+          type: array
+          items:
+            $ref: '#/components/schemas/SuggestionItem'
+        documentId:
+          type: string
+          nullable: true
+          example: 5f7b5d8a9f4b3a2c1d0e9f8a
+        sessionId:
+          type: string
+          nullable: true
+          example: sess_5f7b5d8a9f4b3a2c1d0e9f8c
+        overallFeedback:
+          type: string
+          example: The document has been improved for clarity and conciseness.
+        requestId:
+          type: string
+          example: req_5f7b5d8a9f4b3a2c1d0e9f8e
+        timestamp:
+          type: string
+          format: date-time
+    ChatMessageRequest:
+      type: object
+      required:
+        - message
+      properties:
+        message:
+          type: string
+          example: Can you help me make this paragraph more persuasive?
+        sessionId:
+          type: string
+          nullable: true
+          example: chat_5f7b5d8a9f4b3a2c1d0e9f8c
+        documentId:
+          type: string
+          nullable: true
+          example: 5f7b5d8a9f4b3a2c1d0e9f8a
+        context:
+          type: string
+          nullable: true
+          example: This is the context of the document that the chat message refers to.
+    ChatMessage:
+      type: object
+      properties:
+        id:
+          type: string
+          example: msg_5f7b5d8a9f4b3a2c1d0e9f8c
+        sessionId:
+          type: string
+          example: chat_5f7b5d8a9f4b3a2c1d0e9f8c
+        content:
+          type: string
+          example: Can you help me make this paragraph more persuasive?
+        role:
+          type: string
+          enum:
+            - user
+            - assistant
+          example: user
+        timestamp:
+          type: string
+          format: date-time
+        metadata:
+          type: object
+          nullable: true
+          additionalProperties: true
+          example:
+            documentId: 5f7b5d8a9f4b3a2c1d0e9f8a
+            hasAppliedSuggestion: false
+    ChatMessageResponse:
+      type: object
+      properties:
+        message:
+          $ref: '#/components/schemas/ChatMessage'
+        conversationHistory:
+          type: array
+          items:
+            $ref: '#/components/schemas/ChatMessage'
+        suggestions:
+          type: array
+          items:
+            $ref: '#/components/schemas/SuggestionItem'
+          nullable: true
+        sessionId:
+          type: string
+          example: chat_5f7b5d8a9f4b3a2c1d0e9f8c
+    TemplateResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          example: tmpl_5f7b5d8a9f4b3a2c1d0e9f8c
+        name:
+          type: string
+          example: More Convincing
+        description:
+          type: string
+          example: Makes the text more convincing with stronger arguments
+        promptText:
+          type: string
+          example: Rewrite the text to be more convincing by strengthening arguments and adding persuasive language
+        category:
+          type: string
+          example: Persuasion
+        isSystem:
+          type: boolean
+          example: false
+        createdAt:
+          type: string
+          format: date-time
+        createdBy:
+          type: string
+          nullable: true
+          example: 5f7b5d8a9f4b3a2c1d0e9f8b
+    TemplateListResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/TemplateResponse'
+        categories:
+          type: array
+          items:
+            type: string
+          example:
+            - Grammar
+            - Style
+            - Persuasion
+            - Length
+            - Clarity
+    UserResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          example: 5f7b5d8a9f4b3a2c1d0e9f8b
+        email:
+          type: string
+          format: email
+          example: user@example.com
+        firstName:
+          type: string
+          example: John
+        lastName:
+          type: string
+          example: Doe
+        createdAt:
+          type: string
+          format: date-time
+        lastLogin:
+          type: string
+          format: date-time
+        documentCount:
+          type: integer
+          example: 15
+        preferences:
+          type: object
+          additionalProperties: true
+          example:
+            theme: light
+            fontSize: 16
+            defaultPromptCategories:
+              - Grammar
+              - Style
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: JWT Authorization header using the Bearer scheme
