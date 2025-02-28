@@ -1,0 +1,58 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# Reference to the base Kubernetes configuration
+resources:
+- ../../base
+
+# Staging-specific namespace
+namespace: ai-writing-staging
+
+# Common labels for all resources
+commonLabels:
+  environment: staging
+  app.kubernetes.io/managed-by: kustomize
+  app.kubernetes.io/part-of: ai-writing-enhancement
+  app.kubernetes.io/env: staging
+
+# Replicas configuration for services
+replicas:
+- name: frontend-deployment
+  count: 3
+- name: api-deployment
+  count: 5
+- name: ai-service-deployment
+  count: 5
+
+# Staging-specific patches
+patchesStrategicMerge:
+- resource-limits.yaml
+- environment-config.yaml
+- bluegreen-config.yaml
+
+# ConfigMaps for staging environment
+configMapGenerator:
+- name: staging-config
+  literals:
+  - ENVIRONMENT=staging
+  - LOG_LEVEL=info
+  - FEATURE_FLAGS=ai-templates-enabled,user-accounts-enabled
+
+# Secrets (references to external secrets, actual values managed by a secret manager)
+secretGenerator:
+- name: staging-secrets
+  envs:
+  - staging-secrets.env
+
+# Staging-specific image tags
+images:
+- name: ai-writing/frontend
+  newTag: staging
+- name: ai-writing/api-service
+  newTag: staging
+- name: ai-writing/ai-service
+  newTag: staging
+
+# Preserve original resource names while adding suffix
+namePrefix: ""
+nameSuffix: "-staging"
