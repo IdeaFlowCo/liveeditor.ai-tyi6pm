@@ -1,0 +1,96 @@
+version: "3.9"
+
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    ports:
+      - "5000:5000"
+    environment:
+      FLASK_APP: app.py
+      FLASK_ENV: development
+      FLASK_DEBUG: "True"
+      APP_HOST: 0.0.0.0
+      APP_PORT: 5000
+      MONGODB_URI: mongodb://root:example@mongodb:27017/ai_writing_enhancement?authSource=admin
+      MONGODB_DATABASE: ai_writing_enhancement
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: redispassword
+      SECRET_KEY: dev-secret-key-change-in-production
+      JWT_SECRET_KEY: dev-jwt-secret-key-change-in-production
+      JWT_ACCESS_TOKEN_EXPIRES: 3600
+      JWT_REFRESH_TOKEN_EXPIRES: 604800
+      OPENAI_API_KEY: your-openai-api-key
+      OPENAI_MODEL: gpt-4
+      RATE_LIMIT_DEFAULT: 100
+      RATE_LIMIT_ANONYMOUS: 10
+      RATE_LIMIT_AI_SUGGESTIONS: 50
+      CORS_ALLOWED_ORIGINS: http://localhost:3000,http://127.0.0.1:3000
+      ENABLE_ANONYMOUS_USAGE: "True"
+      ENABLE_DOCUMENT_VERSIONING: "True"
+      ENABLE_SWAGGER: "True"
+      LOG_LEVEL: DEBUG
+    volumes:
+      - .:/app
+    depends_on:
+      mongodb:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - app-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+  mongodb:
+    image: mongo:6.0
+    restart: unless-stopped
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: root
+      MONGO_INITDB_ROOT_PASSWORD: example
+      MONGO_INITDB_DATABASE: ai_writing_enhancement
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb-data:/data/db
+      - ./scripts/db_migration.py:/docker-entrypoint-initdb.d/db_migration.py:ro
+    networks:
+      - app-network
+    healthcheck:
+      test: ["CMD", "mongo", "--eval", "db.adminCommand('ping')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+
+  redis:
+    image: redis:7.0-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--requirepass", "redispassword", "--appendonly", "yes"]
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    networks:
+      - app-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "redispassword", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+volumes:
+  mongodb-data: {}
+  redis-data: {}
+
+networks:
+  app-network:
+    driver: bridge
