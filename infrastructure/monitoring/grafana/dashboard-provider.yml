@@ -1,0 +1,77 @@
+# Configuration file for Grafana dashboard provisioning
+# This file defines how dashboards are automatically loaded from the filesystem
+apiVersion: 1
+
+# List of dashboard providers
+providers:
+  # Default provider for general dashboards
+  - name: 'Default'
+    orgId: 1             # The organization id for the dashboard
+    folder: ''           # No specific folder - dashboards will appear at root level
+    type: 'file'         # Load dashboards from filesystem
+    disableDeletion: false  # Allow dashboard deletion from Grafana UI
+    updateIntervalSeconds: 30  # Check for updates every 30 seconds
+    allowUiUpdates: false  # Prevent saving dashboard changes from UI
+    options:
+      path: '/var/lib/grafana/dashboards'  # Path to dashboard definitions
+      foldersFromFilesStructure: true  # Use directory structure for folders
+  
+  # Application monitoring dashboards (services, APIs, frontend)
+  - name: 'Application'
+    orgId: 1
+    folder: 'Application'  # Will appear in "Application" folder in Grafana
+    type: 'file'
+    disableDeletion: false
+    updateIntervalSeconds: 30
+    allowUiUpdates: true  # Allow dashboard modifications from UI
+    options:
+      path: '/var/lib/grafana/dashboards/application'
+      foldersFromFilesStructure: false
+  
+  # Database monitoring dashboards (MongoDB, Redis, etc.)
+  - name: 'Database'
+    orgId: 1
+    folder: 'Database'
+    type: 'file'
+    disableDeletion: false
+    updateIntervalSeconds: 30
+    allowUiUpdates: true
+    options:
+      path: '/var/lib/grafana/dashboards/database'
+      foldersFromFilesStructure: false
+  
+  # System/infrastructure monitoring dashboards (ECS, EC2, etc.)
+  - name: 'System'
+    orgId: 1
+    folder: 'System'
+    type: 'file'
+    disableDeletion: false
+    updateIntervalSeconds: 30
+    allowUiUpdates: true
+    options:
+      path: '/var/lib/grafana/dashboards/system'
+      foldersFromFilesStructure: false
+  
+  # Business metrics dashboards (user engagement, conversion, etc.)
+  - name: 'Business'
+    orgId: 1
+    folder: 'Business'
+    type: 'file'
+    disableDeletion: false
+    updateIntervalSeconds: 30
+    allowUiUpdates: true
+    options:
+      path: '/var/lib/grafana/dashboards/business'
+      foldersFromFilesStructure: false
+  
+  # AI performance monitoring dashboards (suggestions, acceptance rates, etc.)
+  - name: 'AI-Performance'
+    orgId: 1
+    folder: 'AI Performance'
+    type: 'file'
+    disableDeletion: false
+    updateIntervalSeconds: 30
+    allowUiUpdates: true
+    options:
+      path: '/var/lib/grafana/dashboards/ai-performance'
+      foldersFromFilesStructure: false
