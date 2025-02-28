@@ -1,0 +1,131 @@
+{
+  "alertType": "critical",
+  "responseTime": "15 minutes",
+  "notificationChannels": ["phone", "sms", "email"],
+  "escalationPath": "incident-response-team",
+  "criticalAlerts": [
+    {
+      "id": "service_outage",
+      "description": "Complete service unavailability detected",
+      "source": "api_gateway",
+      "metric": "5xx_error_rate",
+      "threshold": "> 50% for 2 minutes",
+      "evaluationPeriod": "2 minutes",
+      "actionItems": [
+        "War room protocol activation",
+        "Status page update",
+        "Management notification"
+      ]
+    },
+    {
+      "id": "api_error_rate_critical",
+      "description": "API Gateway error rate exceeding critical threshold",
+      "source": "api_gateway",
+      "metric": "error_rate",
+      "threshold": "> 5%",
+      "evaluationPeriod": "3 minutes",
+      "actionItems": [
+        "Investigate logs",
+        "Check recent deployments"
+      ]
+    },
+    {
+      "id": "api_response_time_critical",
+      "description": "API Gateway response time exceeding critical threshold",
+      "source": "api_gateway",
+      "metric": "response_time",
+      "threshold": "> 1000ms",
+      "evaluationPeriod": "3 minutes",
+      "actionItems": [
+        "Scale up API services",
+        "Check database performance"
+      ]
+    },
+    {
+      "id": "document_service_cpu_critical",
+      "description": "Document Service CPU utilization exceeding critical threshold",
+      "source": "document_service",
+      "metric": "cpu_usage",
+      "threshold": "> 90%",
+      "evaluationPeriod": "5 minutes",
+      "actionItems": [
+        "Auto-scale document service",
+        "Check for resource-intensive operations"
+      ]
+    },
+    {
+      "id": "ai_service_queue_depth_critical",
+      "description": "AI service request queue exceeding critical threshold",
+      "source": "ai_service",
+      "metric": "queue_depth",
+      "threshold": "> 100 requests",
+      "evaluationPeriod": "2 minutes",
+      "actionItems": [
+        "Auto-scale AI service",
+        "Implement request throttling"
+      ]
+    },
+    {
+      "id": "ai_service_completion_time_critical",
+      "description": "AI suggestion generation time exceeding critical threshold",
+      "source": "ai_service",
+      "metric": "completion_time",
+      "threshold": "> 10 seconds",
+      "evaluationPeriod": "5 minutes",
+      "actionItems": [
+        "Check OpenAI API health",
+        "Scale AI service resources"
+      ]
+    },
+    {
+      "id": "database_connection_critical",
+      "description": "Database connection count approaching capacity limit",
+      "source": "database",
+      "metric": "connection_count",
+      "threshold": "> 95% capacity",
+      "evaluationPeriod": "3 minutes",
+      "actionItems": [
+        "Optimize connection pooling",
+        "Increase database instance size"
+      ]
+    },
+    {
+      "id": "auth_failure_rate_critical",
+      "description": "Authentication failure rate exceeding critical threshold",
+      "source": "user_service",
+      "metric": "auth_failures",
+      "threshold": "> 30/minute",
+      "evaluationPeriod": "3 minutes",
+      "actionItems": [
+        "Check for unauthorized access attempts",
+        "Implement temporary rate limiting",
+        "Review recent authentication changes"
+      ]
+    },
+    {
+      "id": "openai_api_failure",
+      "description": "Critical dependency on OpenAI API failing",
+      "source": "ai_service",
+      "metric": "external_api_success_rate",
+      "threshold": "< 90%",
+      "evaluationPeriod": "3 minutes",
+      "actionItems": [
+        "Switch to fallback AI mode",
+        "Implement circuit breaker"
+      ]
+    },
+    {
+      "id": "frontend_load_time_critical",
+      "description": "Frontend page load time exceeding critical threshold",
+      "source": "frontend",
+      "metric": "page_load_time",
+      "threshold": "> 5 seconds",
+      "evaluationPeriod": "5 minutes",
+      "actionItems": [
+        "Check CDN performance",
+        "Review recent frontend deployments",
+        "Optimize resource loading"
+      ]
+    }
+  ]
+}
