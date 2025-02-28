@@ -1,0 +1,84 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ZAP configVersion="2.12.0">
+    <!-- OWASP ZAP Configuration for AI Writing Enhancement Application -->
+    <!-- This configuration defines automated security scanning settings -->
+    
+    <context name="AI Writing Enhancement App" includeUrls="https://${APPLICATION_URL}/*" excludeUrls="https://${APPLICATION_URL}/assets/*">
+    </context>
+    
+    <authentication method="formBasedAuthentication" 
+                    loginUrl="https://${APPLICATION_URL}/api/auth/login" 
+                    loginRequestData="email=${ZAP_TEST_USERNAME}&amp;password=${ZAP_TEST_PASSWORD}" 
+                    loggedInRegex="\{\s*&quot;token&quot;\s*:\s*&quot;[^&quot;]+&quot;\s*\}">
+    </authentication>
+    
+    <policy>
+        <!-- Cross-Site Scripting (XSS) -->
+        <scanner id="40012" name="Cross Site Scripting (Reflected)" enabled="true" threshold="medium" strength="high" />
+        <scanner id="40014" name="Cross Site Scripting (Persistent)" enabled="true" threshold="medium" strength="high" />
+        
+        <!-- SQL Injection -->
+        <scanner id="40018" name="SQL Injection" enabled="true" threshold="medium" strength="high" />
+        
+        <!-- CSRF -->
+        <scanner id="90019" name="CSRF Tokens Check" enabled="true" threshold="medium" strength="high" />
+        
+        <!-- Command Injection -->
+        <scanner id="40024" name="Command Injection" enabled="true" threshold="medium" strength="high" />
+    </policy>
+    
+    <spider maxDepth="10" 
+            threadCount="5" 
+            postForm="true" 
+            processForm="true" 
+            parseComments="true" 
+            parseRobotsTxt="true" 
+            handleODataParametersVisited="false">
+    </spider>
+    
+    <ajaxSpider clickDefaultElems="true" 
+                clickElemsOnce="true" 
+                randomInputs="true" 
+                numberOfBrowsers="2" 
+                maxCrawlDepth="10" 
+                maxCrawlStates="0" 
+                maxDuration="0" 
+                eventWait="1000">
+    </ajaxSpider>
+    
+    <ascan scanHeadersAllRequests="true" 
+           threadPerHost="5" 
+           maxRuleDurationInMins="0" 
+           maxScanDurationInMins="60" 
+           defaultThreshold="medium" 
+           defaultStrength="medium" 
+           delayInMs="0" 
+           handleAntiCSRFTokens="true" 
+           alertThreshold="medium" 
+           attackStrength="high">
+    </ascan>
+    
+    <pscan scanOnlyInScope="true" 
+           maxAlertsPerRule="0" 
+           maxBodySizeInBytes="0" 
+           threshold="medium">
+    </pscan>
+    
+    <reporting baseDir="${REPORT_PATH}" 
+               template="traditional-html" 
+               reportFileName="zap-scan-report-${TIMESTAMP}.html" 
+               reportFileNamePattern="zap-scan-report-%d-%m-%Y-%H-%M-%S" 
+               displayReport="false">
+    </reporting>
+    
+    <automation failOnSeverity="high" 
+                failOnMaxAlerts="0" 
+                progressToStdout="true">
+    </automation>
+    
+    <api disableKey="false" 
+         incErrorDetails="true" 
+         reportPermErrors="true" 
+         autofillKey="true">
+    </api>
+</ZAP>
