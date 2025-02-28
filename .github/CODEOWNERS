@@ -1,0 +1,71 @@
+# This file determines which teams or individuals are automatically assigned to review
+# code changes in specific areas of the project when pull requests are created.
+
+# Default owners for everything in the repo (if no pattern below matches)
+* @organization/tech-leads
+
+# Frontend components
+/src/frontend/ @organization/frontend-team
+/src/components/ @organization/frontend-team
+*.tsx @organization/frontend-team
+*.jsx @organization/frontend-team
+*.css @organization/frontend-team
+*.scss @organization/frontend-team
+
+# Document editor and track changes (core functionality)
+/src/editor/ @organization/editor-team @organization/frontend-team
+/src/track-changes/ @organization/editor-team
+
+# Backend services
+/src/backend/ @organization/backend-team
+*.py @organization/backend-team
+/api/ @organization/backend-team @organization/api-team
+
+# AI integration components
+/src/ai/ @organization/ai-team
+/src/langchain/ @organization/ai-team
+/src/prompts/ @organization/ai-team
+/src/chat/ @organization/ai-team @organization/frontend-team
+
+# Sidebar interface
+/src/sidebar/ @organization/frontend-team
+
+# User account and document management
+/src/users/ @organization/backend-team @organization/security
+/src/documents/ @organization/backend-team @organization/editor-team
+
+# Infrastructure and deployment
+/.github/ @organization/devops
+/terraform/ @organization/devops
+/docker/ @organization/devops
+Dockerfile* @organization/devops
+*.yml @organization/devops
+*.yaml @organization/devops
+
+# Database and data layer
+/src/db/ @organization/backend-team @organization/data-team
+/migrations/ @organization/data-team
+/src/storage/ @organization/data-team @organization/backend-team
+
+# Security-sensitive files
+/src/auth/ @organization/security @organization/backend-team
+/src/security/ @organization/security
+
+# Documentation
+/docs/ @organization/tech-writers @organization/tech-leads
+*.md @organization/tech-writers
+
+# Monitoring and observability
+/src/monitoring/ @organization/devops @organization/backend-team
+
+# Tests
+/tests/ @organization/qa
+/**/__tests__/ @organization/qa
+/**/*.test.* @organization/qa
+/**/*.spec.* @organization/qa
+
+# Package management
+package.json @organization/frontend-team @organization/devops
+package-lock.json @organization/frontend-team @organization/devops
+requirements.txt @organization/backend-team @organization/devops
+poetry.lock @organization/backend-team @organization/devops
