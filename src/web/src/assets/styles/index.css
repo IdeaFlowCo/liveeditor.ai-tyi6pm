@@ -1,0 +1,310 @@
+/* 
+ * index.css
+ * Global CSS styles for the AI writing enhancement application
+ * Version: 1.0.0
+ */
+
+/* Import Google Fonts */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap'); /* Google Fonts - latest */
+@import url('https://fonts.googleapis.com/css2?family=Source+Serif+Pro:wght@400;600;700&display=swap'); /* Google Fonts - latest */
+@import url('https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;500&display=swap'); /* Google Fonts - latest */
+
+/* Import Tailwind CSS */
+@import './tailwind.css';
+
+/* Global CSS Variables */
+:root {
+  /* Primary Colors */
+  --primary-blue: #2C6ECB;
+  --secondary-teal: #20B2AA;
+  --neutral-gray: #F5F7FA;
+  
+  /* Text Colors */
+  --primary-text: #333333;
+  --secondary-text: #666666;
+  --tertiary-text: #999999;
+  
+  /* Track Changes Colors */
+  --deletion-color: #FF6B6B;
+  --addition-color: #20A779;
+  --comment-color: #F9A826;
+  
+  /* Status Colors */
+  --success-color: #28A745;
+  --warning-color: #FFC107;
+  --error-color: #DC3545;
+  --info-color: #17A2B8;
+  
+  /* Spacing */
+  --spacing-xs: 4px;
+  --spacing-sm: 8px;
+  --spacing-md: 12px;
+  --spacing-lg: 16px;
+  --spacing-xl: 20px;
+  --spacing-xxl: 24px;
+  
+  /* Component Dimensions */
+  --sidebar-width: 320px;
+  --editor-padding: 20px;
+  --button-height: 40px;
+  --input-height: 40px;
+  --border-radius: 4px;
+  --border-radius-lg: 8px;
+
+  /* Focus States */
+  --focus-ring-width: 2px;
+  --focus-ring-color: #2C6ECB;
+}
+
+/* Reset Box Model */
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
+/* Base Styles */
+html, body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  width: 100%;
+}
+
+body {
+  font-family: 'Inter', sans-serif;
+  color: var(--primary-text);
+  background-color: white;
+  line-height: 1.4;
+  font-size: 14px;
+}
+
+/* Document Editor Styles */
+.document-editor {
+  padding: var(--editor-padding);
+  background-color: white;
+  border-radius: var(--border-radius);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  height: 100%;
+  overflow-y: auto;
+}
+
+.editor-content {
+  font-family: 'Source Serif Pro', serif;
+  font-size: 16px;
+  line-height: 1.6;
+  color: var(--primary-text);
+}
+
+/* Code Block Styling */
+.code-block {
+  font-family: 'Roboto Mono', monospace;
+  background-color: var(--neutral-gray);
+  border-radius: var(--border-radius);
+  padding: var(--spacing-md);
+  font-size: 14px;
+  line-height: 1.5;
+  overflow-x: auto;
+}
+
+/* Track Changes Styling */
+.track-changes-deletion {
+  color: var(--deletion-color);
+  text-decoration: line-through;
+  background-color: rgba(255, 107, 107, 0.1);
+}
+
+.track-changes-addition {
+  color: var(--addition-color);
+  text-decoration: underline;
+  background-color: rgba(32, 167, 121, 0.1);
+}
+
+.track-changes-comment {
+  position: relative;
+  background-color: rgba(249, 168, 38, 0.1);
+  border-bottom: 1px dotted var(--comment-color);
+}
+
+/* Sidebar Styles */
+.sidebar {
+  width: var(--sidebar-width);
+  background-color: var(--neutral-gray);
+  border-left: 1px solid #EEEEEE;
+  overflow-y: auto;
+  height: 100%;
+}
+
+/* Input and Button Styles (Extensions to Tailwind) */
+.input-field {
+  height: var(--input-height);
+  border: 1px solid #CCCCCC;
+  border-radius: var(--border-radius);
+  padding: var(--spacing-sm) var(--spacing-md);
+  width: 100%;
+  color: var(--primary-text);
+}
+
+.input-field::placeholder {
+  color: var(--tertiary-text);
+}
+
+.input-field:focus {
+  border-color: var(--primary-blue);
+  outline: none;
+  box-shadow: 0 0 0 1px var(--primary-blue);
+}
+
+/* Status Message Styles */
+.status-success {
+  color: var(--success-color);
+  border-color: var(--success-color);
+  background-color: rgba(40, 167, 69, 0.1);
+}
+
+.status-warning {
+  color: var(--warning-color);
+  border-color: var(--warning-color);
+  background-color: rgba(255, 193, 7, 0.1);
+}
+
+.status-error {
+  color: var(--error-color);
+  border-color: var(--error-color);
+  background-color: rgba(220, 53, 69, 0.1);
+}
+
+.status-info {
+  color: var(--info-color);
+  border-color: var(--info-color);
+  background-color: rgba(23, 162, 184, 0.1);
+}
+
+/* Accessibility Styles */
+:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring-color);
+  outline-offset: 2px;
+}
+
+/* Use appropriate visual cues not relying on color alone */
+.track-changes-deletion::before {
+  content: "−";
+  margin-right: 2px;
+  display: inline-block;
+}
+
+.track-changes-addition::before {
+  content: "+";
+  margin-right: 2px;
+  display: inline-block;
+}
+
+/* Screen Reader Only Content */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border-width: 0;
+}
+
+/* Animation utilities */
+.transition-standard {
+  transition: all 0.2s ease-in-out;
+}
+
+/* Responsive Design */
+@media (max-width: 767px) {
+  /* Mobile */
+  :root {
+    --sidebar-width: 100%;
+    --editor-padding: 12px;
+  }
+  
+  .sidebar {
+    border-left: none;
+    border-top: 1px solid #EEEEEE;
+    width: 100%;
+    height: auto;
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    z-index: 10;
+  }
+  
+  .document-editor {
+    margin-bottom: 60px; /* Space for the bottom navigation */
+  }
+}
+
+@media (min-width: 768px) and (max-width: 1023px) {
+  /* Tablet */
+  :root {
+    --sidebar-width: 280px;
+    --editor-padding: 16px;
+  }
+  
+  .document-editor {
+    padding: var(--editor-padding);
+  }
+}
+
+@media (min-width: 1024px) {
+  /* Desktop */
+  body {
+    font-size: 14px;
+  }
+  
+  .editor-content {
+    font-size: 16px;
+  }
+}
+
+/* Print styles */
+@media print {
+  .sidebar,
+  .navigation,
+  .toolbar {
+    display: none !important;
+  }
+  
+  .document-editor {
+    box-shadow: none;
+    padding: 0;
+    height: auto;
+  }
+  
+  /* Hide track changes styling for print */
+  .track-changes-deletion,
+  .track-changes-addition,
+  .track-changes-comment {
+    color: var(--primary-text);
+    text-decoration: none;
+    background-color: transparent;
+  }
+  
+  .track-changes-deletion::before,
+  .track-changes-addition::before {
+    display: none;
+  }
+}
+
+/* High contrast mode support */
+@media (prefers-contrast: high) {
+  :root {
+    --primary-blue: #0047AB;
+    --secondary-teal: #008080;
+    --deletion-color: #D00000;
+    --addition-color: #006400;
+    --comment-color: #B8860B;
+  }
+  
+  .track-changes-deletion,
+  .track-changes-addition,
+  .track-changes-comment {
+    background-color: transparent;
+    font-weight: bold;
+  }
+}
