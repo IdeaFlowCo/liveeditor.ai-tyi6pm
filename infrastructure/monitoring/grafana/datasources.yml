@@ -1,0 +1,109 @@
+apiVersion: 1
+
+# List of datasources that should be deleted from the database
+deleteDatasources:
+  - name: AIWriter-Prometheus
+    orgId: 1
+  - name: AIWriter-CloudWatch-USEast
+    orgId: 1
+  - name: AIWriter-CloudWatch-USWest
+    orgId: 1
+  - name: AIWriter-CloudWatch-EU
+    orgId: 1
+  - name: AIWriter-Elasticsearch
+    orgId: 1
+  - name: AIWriter-XRay
+    orgId: 1
+  - name: AIWriter-Loki
+    orgId: 1
+
+# List of datasources to insert/update
+datasources:
+  # Prometheus datasource for application and infrastructure metrics
+  - name: AIWriter-Prometheus
+    type: prometheus
+    access: proxy
+    url: http://prometheus-server:9090
+    isDefault: true
+    version: 1
+    editable: true
+    jsonData:
+      httpMethod: POST
+      timeInterval: 15s
+      exemplarTraceIdDestinations:
+        - name: traceID
+          datasourceUid: aiwriter-xray
+
+  # CloudWatch datasource for AWS metrics and logs (US East)
+  - name: AIWriter-CloudWatch-USEast
+    type: cloudwatch
+    access: proxy
+    jsonData:
+      authType: default  # Uses EC2 instance role or EKS service account
+      defaultRegion: us-east-1
+    version: 1
+    editable: true
+    
+  # CloudWatch datasource for AWS metrics and logs (US West)
+  - name: AIWriter-CloudWatch-USWest
+    type: cloudwatch
+    access: proxy
+    jsonData:
+      authType: default  # Uses EC2 instance role or EKS service account
+      defaultRegion: us-west-2
+    version: 1
+    editable: true
+    
+  # CloudWatch datasource for AWS metrics and logs (EU)
+  - name: AIWriter-CloudWatch-EU
+    type: cloudwatch
+    access: proxy
+    jsonData:
+      authType: default  # Uses EC2 instance role or EKS service account
+      defaultRegion: eu-west-1
+    version: 1
+    editable: true
+
+  # Elasticsearch datasource for log aggregation
+  - name: AIWriter-Elasticsearch
+    type: elasticsearch
+    access: proxy
+    url: http://elasticsearch:9200
+    database: "aiwriter-logs-*"
+    jsonData:
+      timeField: "@timestamp"
+      esVersion: 7.10.0
+      maxConcurrentShardRequests: 5
+      logMessageField: message
+      logLevelField: level
+      dataLinks:
+        - field: traceID
+          url: "d/${__value.raw}"
+          datasourceUid: aiwriter-xray
+    version: 1
+    editable: true
+
+  # AWS X-Ray datasource for distributed tracing
+  - name: AIWriter-XRay
+    type: grafana-x-ray-datasource
+    uid: aiwriter-xray
+    jsonData:
+      authType: default  # Uses EC2 instance role or EKS service account
+      defaultRegion: us-east-1
+    version: 1
+    editable: true
+
+  # Loki datasource for application logs
+  - name: AIWriter-Loki
+    type: loki
+    access: proxy
+    url: http://loki:3100
+    jsonData:
+      maxLines: 1000
+      derivedFields:
+        - name: traceID
+          matcherRegex: "traceID=(\\w+)"
+          url: "d/${__value.raw}"
+          datasourceUid: aiwriter-xray
+    version: 1
+    editable: true
