@@ -1,0 +1,49 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - ../../base
+namePrefix: dev-
+commonLabels:
+  environment: development
+  app: ai-writing-enhancement
+patchesStrategicMerge:
+  - patches/deployment-patch.yaml
+  - patches/service-patch.yaml
+  - patches/ingress-patch.yaml
+  - patches/configmap-patch.yaml
+configMapGenerator:
+  - name: app-config
+    behavior: merge
+    literals:
+      - ENVIRONMENT=development
+      - DEBUG=true
+      - LOG_LEVEL=debug
+      - API_URL=https://dev-api.ai-writer.example.com
+      - FRONTEND_URL=https://dev.ai-writer.example.com
+      - ENABLE_ANALYTICS=false
+secretGenerator:
+  - name: app-secrets
+    behavior: merge
+    literals:
+      - OPENAI_API_KEY=dev-key-placeholder
+      - JWT_SECRET=dev-secret-placeholder
+      - MONGODB_URI=mongodb://dev-mongodb:27017/ai-writer
+      - REDIS_URI=redis://dev-redis:6379/0
+      - S3_BUCKET=dev-ai-writer-documents
+images:
+  - name: ai-writer-frontend
+    newName: ai-writer-registry/frontend
+    newTag: dev
+  - name: ai-writer-api
+    newName: ai-writer-registry/api
+    newTag: dev
+  - name: ai-writer-ai-service
+    newName: ai-writer-registry/ai-service
+    newTag: dev
+replicas:
+  - name: frontend-deployment
+    count: 2
+  - name: api-deployment
+    count: 2
+  - name: ai-service-deployment
+    count: 2
