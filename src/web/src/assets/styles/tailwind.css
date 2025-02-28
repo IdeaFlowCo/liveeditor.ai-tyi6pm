@@ -1,0 +1,83 @@
+/**
+ * tailwind.css
+ * Main Tailwind CSS file for the AI writing enhancement interface
+ * 
+ * This file imports Tailwind's base, components, and utilities directives
+ * to provide utility-first styling according to the design specifications.
+ * 
+ * The styling is configured through tailwind.config.js to match the color scheme,
+ * typography, and responsive breakpoints defined in the technical specifications.
+ * 
+ * tailwindcss v3.3.0
+ */
+
+/* Import Tailwind's base styles */
+@tailwind base;
+
+/* Import Tailwind's component styles */
+@tailwind components;
+
+/* Import Tailwind's utility classes */
+@tailwind utilities;
+
+/* Custom layer for additional component styles */
+@layer components {
+  /* Track changes specific styling */
+  .deletion {
+    @apply line-through text-red-500;
+  }
+  
+  .addition {
+    @apply underline text-green-600;
+  }
+  
+  .comment {
+    @apply text-amber-500;
+  }
+  
+  /* Document editor specific styling */
+  .document-content {
+    @apply font-serif text-base leading-relaxed;
+  }
+  
+  /* Button variants */
+  .btn-primary {
+    @apply bg-primary text-white rounded-lg px-4 py-2 hover:bg-primary-dark focus:ring-2 focus:ring-primary focus:ring-opacity-50;
+  }
+  
+  .btn-secondary {
+    @apply border border-primary text-primary rounded-lg px-4 py-2 hover:bg-primary hover:bg-opacity-10 focus:ring-2 focus:ring-primary focus:ring-opacity-50;
+  }
+  
+  .btn-tertiary {
+    @apply text-primary hover:underline focus:ring-2 focus:ring-primary focus:ring-opacity-50;
+  }
+}
+
+/* Custom base styles */
+@layer base {
+  h1 {
+    @apply text-2xl font-semibold leading-tight;
+  }
+  
+  h2 {
+    @apply text-xl font-semibold leading-tight;
+  }
+  
+  h3 {
+    @apply text-lg font-semibold leading-tight;
+  }
+  
+  h4 {
+    @apply text-base font-bold leading-tight;
+  }
+  
+  body {
+    @apply text-gray-900 bg-white font-sans;
+  }
+  
+  /* For editor content */
+  .ProseMirror {
+    @apply font-serif text-base leading-relaxed outline-none;
+  }
+}
