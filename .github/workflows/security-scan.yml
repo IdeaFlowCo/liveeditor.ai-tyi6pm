@@ -1,0 +1,432 @@
+name: Security Scan
+
+on:
+  schedule:
+    - cron: '0 0 * * 0'  # Run weekly on Sunday at midnight
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+  workflow_dispatch:  # Allow manual triggering
+
+env:
+  STAGING_API_URL: https://staging-api.ai-writing-enhancement.example.com
+  FAILURE_THRESHOLD: high  # Set to 'critical' for production
+
+jobs:
+  static_analysis:
+    name: Static Code Analysis
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      # Frontend static analysis with ESLint
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+          cache: 'npm'
+      
+      - name: Install frontend dependencies
+        run: |
+          cd frontend
+          npm ci
+        continue-on-error: true  # Continue even if npm ci fails
+      
+      - name: Run ESLint security scan
+        run: |
+          cd frontend
+          npm install --save-dev eslint @microsoft/eslint-formatter-sarif eslint-plugin-security
+          npx eslint --ext .js,.jsx,.ts,.tsx --format @microsoft/eslint-formatter-sarif -o eslint-results.sarif . || echo "ESLint found issues but continuing"
+      
+      - name: Upload ESLint SARIF report
+        uses: github/codeql-action/upload-sarif@v2
+        with:
+          sarif_file: frontend/eslint-results.sarif
+          category: frontend-eslint
+        if: always()  # Always attempt to upload report
+      
+      # Backend static analysis with Bandit
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+          cache: 'pip'
+      
+      - name: Install Bandit
+        run: |
+          pip install bandit
+      
+      - name: Run Bandit scan
+        run: |
+          cd backend
+          bandit -r -f sarif -o bandit-results.sarif . || echo "Bandit found issues but continuing"
+      
+      - name: Upload Bandit SARIF report
+        uses: github/codeql-action/upload-sarif@v2
+        with:
+          sarif_file: backend/bandit-results.sarif
+          category: backend-bandit
+        if: always()  # Always attempt to upload report
+      
+      - name: Save scan results
+        uses: actions/upload-artifact@v3
+        with:
+          name: static-analysis-results
+          path: |
+            frontend/eslint-results.sarif
+            backend/bandit-results.sarif
+        if: always()  # Always save results
+
+  dependency_scan:
+    name: Dependency Vulnerability Scan
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+      
+      # Frontend dependency scan
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+          cache: 'npm'
+      
+      - name: Run npm audit
+        run: |
+          cd frontend
+          npm ci
+          npm audit --json > npm-audit-results.json || true
+      
+      - name: Process npm audit results
+        run: |
+          cd frontend
+          echo "Processing npm audit results..."
+          if [ -f npm-audit-results.json ]; then
+            if grep -q '"severity":"critical"' npm-audit-results.json; then
+              echo "::warning::Critical vulnerabilities found in npm dependencies"
+              echo "CRITICAL_NPM_VULNS=true" >> $GITHUB_ENV
+            fi
+          else
+            echo "::warning::npm audit did not produce results file"
+          fi
+      
+      # Backend dependency scan
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+          cache: 'pip'
+      
+      - name: Install safety
+        run: |
+          pip install safety
+      
+      - name: Run safety check
+        run: |
+          cd backend
+          pip install -r requirements.txt || echo "Failed to install all requirements but continuing"
+          safety check --json > safety-results.json || true
+      
+      - name: Process safety results
+        run: |
+          cd backend
+          echo "Processing safety results..."
+          if [ -f safety-results.json ]; then
+            if grep -q '"severity":"critical"' safety-results.json; then
+              echo "::warning::Critical vulnerabilities found in Python dependencies"
+              echo "CRITICAL_PY_VULNS=true" >> $GITHUB_ENV
+            fi
+          else
+            echo "::warning::safety check did not produce results file"
+          fi
+      
+      - name: Upload scan results
+        uses: actions/upload-artifact@v3
+        with:
+          name: dependency-scan-results
+          path: |
+            frontend/npm-audit-results.json
+            backend/safety-results.json
+        if: always()  # Always save results
+
+  container_scan:
+    name: Container Image Scan
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+      
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+      
+      - name: Build frontend image
+        uses: docker/build-push-action@v4
+        with:
+          context: ./frontend
+          push: false
+          load: true
+          tags: ai-writing-frontend:test
+        continue-on-error: true  # Continue even if build fails
+      
+      - name: Build backend image
+        uses: docker/build-push-action@v4
+        with:
+          context: ./backend
+          push: false
+          load: true
+          tags: ai-writing-backend:test
+        continue-on-error: true  # Continue even if build fails
+      
+      - name: Run Trivy vulnerability scanner on frontend image
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ai-writing-frontend:test
+          format: 'sarif'
+          output: 'trivy-frontend-results.sarif'
+          severity: 'CRITICAL,HIGH'
+        continue-on-error: true  # Continue even if vulnerabilities are found
+      
+      - name: Run Trivy vulnerability scanner on backend image
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ai-writing-backend:test
+          format: 'sarif'
+          output: 'trivy-backend-results.sarif'
+          severity: 'CRITICAL,HIGH'
+        continue-on-error: true  # Continue even if vulnerabilities are found
+      
+      - name: Upload Trivy frontend scan results
+        uses: github/codeql-action/upload-sarif@v2
+        with:
+          sarif_file: trivy-frontend-results.sarif
+          category: container-frontend
+        if: always()  # Always attempt to upload report
+      
+      - name: Upload Trivy backend scan results
+        uses: github/codeql-action/upload-sarif@v2
+        with:
+          sarif_file: trivy-backend-results.sarif
+          category: container-backend
+        if: always()  # Always attempt to upload report
+      
+      - name: Save scan results
+        uses: actions/upload-artifact@v3
+        with:
+          name: container-scan-results
+          path: |
+            trivy-frontend-results.sarif
+            trivy-backend-results.sarif
+        if: always()  # Always save results
+
+  owasp_zap_scan:
+    name: OWASP ZAP Scan
+    runs-on: ubuntu-latest
+    if: github.event_name != 'pull_request'  # Skip for PRs to avoid scanning on every PR
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+      
+      - name: Create ZAP rules file if not exists
+        run: |
+          mkdir -p .zap
+          if [ ! -f .zap/rules.tsv ]; then
+            echo "# Add custom ZAP rules here" > .zap/rules.tsv
+            echo "10016	IGNORE	Timestamp Disclosure	Low	False Positive on common timestamps" >> .zap/rules.tsv
+          fi
+      
+      - name: Run ZAP Scan
+        uses: zaproxy/action-full-scan@v0.4.0
+        with:
+          target: ${{ env.STAGING_API_URL }}
+          rules_file_name: '.zap/rules.tsv'
+          cmd_options: '-a -j'  # -j to generate JSON report
+        continue-on-error: true  # Continue even if vulnerabilities are found
+      
+      - name: Upload ZAP scan results
+        uses: actions/upload-artifact@v3
+        with:
+          name: zap-scan-results
+          path: |
+            zap-report.html
+            zap-report.json
+        if: always()  # Always save results
+
+  report_summary:
+    name: Security Report Summary
+    needs: [static_analysis, dependency_scan, container_scan]
+    if: always()  # Run even if previous jobs fail
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+      
+      - name: Download all workflow artifacts
+        uses: actions/download-artifact@v3
+      
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+      
+      - name: Create simple security report
+        run: |
+          echo "# AI Writing Enhancement Security Scan Report" > security-report.md
+          echo "Generated on: $(date)" >> security-report.md
+          echo "" >> security-report.md
+          
+          echo "## Static Analysis Results" >> security-report.md
+          echo "" >> security-report.md
+          echo "### ESLint (Frontend)" >> security-report.md
+          if [ -f "static-analysis-results/frontend/eslint-results.sarif" ]; then
+            echo "- ESLint results available in artifact" >> security-report.md
+            if grep -q '"level":"error"' static-analysis-results/frontend/eslint-results.sarif; then
+              echo "- ⚠️ **SECURITY ISSUES FOUND**" >> security-report.md
+            fi
+          else
+            echo "- ESLint results not available" >> security-report.md
+          fi
+          echo "" >> security-report.md
+          
+          echo "### Bandit (Backend)" >> security-report.md
+          if [ -f "static-analysis-results/backend/bandit-results.sarif" ]; then
+            echo "- Bandit results available in artifact" >> security-report.md
+            if grep -q '"level":"error"' static-analysis-results/backend/bandit-results.sarif; then
+              echo "- ⚠️ **SECURITY ISSUES FOUND**" >> security-report.md
+            fi
+          else
+            echo "- Bandit results not available" >> security-report.md
+          fi
+          echo "" >> security-report.md
+          
+          echo "## Dependency Scan Results" >> security-report.md
+          echo "" >> security-report.md
+          echo "### npm audit (Frontend)" >> security-report.md
+          if [ -f "dependency-scan-results/frontend/npm-audit-results.json" ]; then
+            echo "- npm audit results available in artifact" >> security-report.md
+            if grep -q '"severity":"critical"' dependency-scan-results/frontend/npm-audit-results.json; then
+              echo "- ⚠️ **CRITICAL VULNERABILITIES FOUND**" >> security-report.md
+              echo "CRITICAL_VULNS=true" >> $GITHUB_ENV
+            fi
+          else
+            echo "- npm audit results not available" >> security-report.md
+          fi
+          echo "" >> security-report.md
+          
+          echo "### Safety (Backend)" >> security-report.md
+          if [ -f "dependency-scan-results/backend/safety-results.json" ]; then
+            echo "- Safety results available in artifact" >> security-report.md
+            if grep -q '"severity":"critical"' dependency-scan-results/backend/safety-results.json; then
+              echo "- ⚠️ **CRITICAL VULNERABILITIES FOUND**" >> security-report.md
+              echo "CRITICAL_VULNS=true" >> $GITHUB_ENV
+            fi
+          else
+            echo "- Safety results not available" >> security-report.md
+          fi
+          echo "" >> security-report.md
+          
+          echo "## Container Scan Results" >> security-report.md
+          echo "" >> security-report.md
+          echo "### Trivy (Frontend Container)" >> security-report.md
+          if [ -f "container-scan-results/trivy-frontend-results.sarif" ]; then
+            echo "- Trivy frontend results available in artifact" >> security-report.md
+            if grep -q '"level":"error"' container-scan-results/trivy-frontend-results.sarif; then
+              echo "- ⚠️ **HIGH/CRITICAL VULNERABILITIES FOUND**" >> security-report.md
+              echo "CRITICAL_VULNS=true" >> $GITHUB_ENV
+            fi
+          else
+            echo "- Trivy frontend results not available" >> security-report.md
+          fi
+          echo "" >> security-report.md
+          
+          echo "### Trivy (Backend Container)" >> security-report.md
+          if [ -f "container-scan-results/trivy-backend-results.sarif" ]; then
+            echo "- Trivy backend results available in artifact" >> security-report.md
+            if grep -q '"level":"error"' container-scan-results/trivy-backend-results.sarif; then
+              echo "- ⚠️ **HIGH/CRITICAL VULNERABILITIES FOUND**" >> security-report.md
+              echo "CRITICAL_VULNS=true" >> $GITHUB_ENV
+            fi
+          else
+            echo "- Trivy backend results not available" >> security-report.md
+          fi
+          echo "" >> security-report.md
+          
+          echo "## OWASP ZAP Scan Results" >> security-report.md
+          echo "" >> security-report.md
+          if [ -f "zap-scan-results/zap-report.json" ]; then
+            echo "- ZAP scan results available in artifact" >> security-report.md
+            if grep -q '"risk":"High"' zap-scan-results/zap-report.json; then
+              echo "- ⚠️ **HIGH RISKS FOUND**" >> security-report.md
+              echo "CRITICAL_VULNS=true" >> $GITHUB_ENV
+            fi
+          else
+            echo "- ZAP scan not performed or results not available" >> security-report.md
+          fi
+          
+          cp security-report.md security-report-full.md
+          
+          if [ "$CRITICAL_VULNS" == "true" ]; then
+            echo "## ⚠️ Critical Security Issues Found" > security-report-critical.md
+            echo "" >> security-report-critical.md
+            echo "Critical security vulnerabilities were detected during the automated security scan." >> security-report-critical.md
+            echo "Please review the full security report in the workflow artifacts." >> security-report-critical.md
+            echo "" >> security-report-critical.md
+            echo "**Workflow run:** ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" >> security-report-critical.md
+          fi
+      
+      - name: Check for critical vulnerabilities
+        id: check_vulns
+        run: |
+          if [ "$CRITICAL_VULNS" == "true" ]; then
+            echo "Has critical vulnerabilities"
+            echo "HAS_CRITICAL_VULNS=true" >> $GITHUB_ENV
+            echo "::error::Critical security vulnerabilities found!"
+          else
+            echo "No critical vulnerabilities found"
+          fi
+      
+      - name: Create GitHub issues for critical vulnerabilities
+        if: env.HAS_CRITICAL_VULNS == 'true'
+        uses: peter-evans/create-issue-from-file@v4
+        with:
+          title: Critical Security Vulnerabilities Detected
+          content-filepath: ./security-report-critical.md
+          labels: security, high-priority
+      
+      - name: Send Slack notification for critical findings
+        if: env.HAS_CRITICAL_VULNS == 'true' && secrets.SLACK_WEBHOOK_URL != ''
+        uses: 8398a7/action-slack@v3
+        with:
+          status: custom
+          fields: repo,message,commit,action
+          custom_payload: |
+            {
+              "text": "⚠️ Critical security vulnerabilities detected in ${{ github.repository }}",
+              "attachments": [
+                {
+                  "color": "danger",
+                  "title": "Security Scan Results",
+                  "title_link": "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}",
+                  "text": "Please review the security report and address the critical issues immediately."
+                }
+              ]
+            }
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+      
+      - name: Upload security report
+        uses: actions/upload-artifact@v3
+        with:
+          name: security-report
+          path: |
+            security-report.md
+            security-report-full.md
+            security-report-critical.md
+          if-no-files-found: ignore
+      
+      - name: Fail workflow if critical issues found and branch is protected
+        if: env.HAS_CRITICAL_VULNS == 'true' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop')
+        run: |
+          echo "Critical security vulnerabilities found in protected branch. Failing workflow."
+          exit 1
