@@ -1,0 +1,263 @@
+name: Frontend CI/CD Pipeline
+
+# Workflow triggers
+on:
+  push:
+    branches:
+      - main
+      - develop
+  pull_request:
+    branches:
+      - main
+      - develop
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Deployment environment'
+        required: true
+        default: 'dev'
+        type: choice
+        options:
+          - dev
+          - staging
+          - prod
+
+# Global environment variables
+env:
+  ECR_REPOSITORY: ai-writing-enhancement-frontend
+  AWS_REGION: us-east-1
+  NODE_VERSION: 18.x
+
+jobs:
+  # Build and test the frontend application
+  build_and_test:
+    name: Build and Test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository code
+        uses: actions/checkout@v3
+
+      - name: Set up Node.js environment
+        uses: actions/setup-node@v3
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install npm dependencies
+        run: npm ci
+
+      - name: Run linting checks
+        run: npm run lint
+
+      - name: Verify TypeScript types
+        run: npm run type-check
+
+      - name: Execute unit tests with coverage
+        run: npm run test:coverage
+
+      - name: Build the application for production
+        run: npm run build
+
+  # Run security scanning on the frontend codebase
+  security_scan:
+    name: Security Scan
+    needs: build_and_test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository code
+        uses: actions/checkout@v3
+
+      - name: Set up Node.js environment
+        uses: actions/setup-node@v3
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install npm dependencies
+        run: npm ci
+
+      - name: Perform npm audit for dependency vulnerabilities
+        run: npm audit --audit-level=high
+
+      - name: Scan codebase for sensitive information leaks
+        uses: zricethezav/gitleaks-action@v2
+        with:
+          config-path: .github/gitleaks.toml
+
+  # Create Docker image and push to Amazon ECR registry
+  build_and_push_image:
+    name: Build and Push Docker Image
+    needs: security_scan
+    runs-on: ubuntu-latest
+    outputs:
+      image-tag: ${{ steps.set-env-vars.outputs.image-tag }}
+    steps:
+      - name: Checkout repository code
+        uses: actions/checkout@v3
+
+      - name: Configure AWS credentials using secrets
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR registry
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v1
+
+      - name: Set environment variables including image tag from commit SHA
+        id: set-env-vars
+        run: |
+          # Use short SHA for image tag
+          IMAGE_TAG=$(echo ${{ github.sha }} | cut -c1-8)
+          echo "image-tag=${IMAGE_TAG}" >> $GITHUB_OUTPUT
+          echo "ecr-repository=${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}" >> $GITHUB_OUTPUT
+
+      - name: Build and tag Docker image using frontend Dockerfile
+        run: |
+          docker build -t ${{ steps.set-env-vars.outputs.ecr-repository }}:${{ steps.set-env-vars.outputs.image-tag }} -t ${{ steps.set-env-vars.outputs.ecr-repository }}:latest .
+
+      - name: Scan Docker image for security vulnerabilities
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ${{ steps.set-env-vars.outputs.ecr-repository }}:${{ steps.set-env-vars.outputs.image-tag }}
+          format: 'table'
+          exit-code: '1'
+          ignore-unfixed: true
+          severity: 'CRITICAL,HIGH'
+
+      - name: Push tagged image to ECR repository
+        run: |
+          docker push ${{ steps.set-env-vars.outputs.ecr-repository }}:${{ steps.set-env-vars.outputs.image-tag }}
+          docker push ${{ steps.set-env-vars.outputs.ecr-repository }}:latest
+
+  # Deploy the application to the development environment
+  deploy_dev:
+    name: Deploy to Development
+    needs: build_and_push_image
+    if: github.ref == 'refs/heads/develop' || (github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'dev')
+    runs-on: ubuntu-latest
+    environment: development
+    steps:
+      - name: Checkout repository code
+        uses: actions/checkout@v3
+
+      - name: Configure AWS credentials using secrets
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR registry
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v1
+
+      - name: Download current ECS task definition for development
+        run: |
+          aws ecs describe-task-definition --task-definition ai-writing-enhancement-frontend-dev --query taskDefinition > task-definition.json
+
+      - name: Update task definition with new container image
+        id: render-task-definition
+        uses: aws-actions/amazon-ecs-render-task-definition@v1
+        with:
+          task-definition: task-definition.json
+          container-name: ai-writing-enhancement-frontend
+          image: ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ needs.build_and_push_image.outputs.image-tag }}
+
+      - name: Deploy updated task definition to development ECS service
+        uses: aws-actions/amazon-ecs-deploy-task-definition@v1
+        with:
+          task-definition: ${{ steps.render-task-definition.outputs.task-definition }}
+          service: ai-writing-enhancement-frontend-dev
+          cluster: ai-writing-enhancement-dev
+          wait-for-service-stability: true
+
+  # Deploy the application to the staging environment
+  deploy_staging:
+    name: Deploy to Staging
+    needs: build_and_push_image
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'staging'
+    runs-on: ubuntu-latest
+    environment: staging
+    steps:
+      - name: Checkout repository code
+        uses: actions/checkout@v3
+
+      - name: Configure AWS credentials using secrets
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR registry
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v1
+
+      - name: Download current ECS task definition for staging
+        run: |
+          aws ecs describe-task-definition --task-definition ai-writing-enhancement-frontend-staging --query taskDefinition > task-definition.json
+
+      - name: Update task definition with new container image
+        id: render-task-definition
+        uses: aws-actions/amazon-ecs-render-task-definition@v1
+        with:
+          task-definition: task-definition.json
+          container-name: ai-writing-enhancement-frontend
+          image: ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ needs.build_and_push_image.outputs.image-tag }}
+
+      - name: Deploy updated task definition to staging ECS service
+        uses: aws-actions/amazon-ecs-deploy-task-definition@v1
+        with:
+          task-definition: ${{ steps.render-task-definition.outputs.task-definition }}
+          service: ai-writing-enhancement-frontend-staging
+          cluster: ai-writing-enhancement-staging
+          wait-for-service-stability: true
+
+  # Deploy the application to the production environment
+  deploy_prod:
+    name: Deploy to Production
+    needs: build_and_push_image
+    if: github.ref == 'refs/heads/main' || (github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'prod')
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Checkout repository code
+        uses: actions/checkout@v3
+
+      - name: Configure AWS credentials using secrets
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR registry
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v1
+
+      - name: Download current ECS task definition for production
+        run: |
+          aws ecs describe-task-definition --task-definition ai-writing-enhancement-frontend-prod --query taskDefinition > task-definition.json
+
+      - name: Update task definition with new container image
+        id: render-task-definition
+        uses: aws-actions/amazon-ecs-render-task-definition@v1
+        with:
+          task-definition: task-definition.json
+          container-name: ai-writing-enhancement-frontend
+          image: ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ needs.build_and_push_image.outputs.image-tag }}
+
+      - name: Deploy updated task definition to production ECS service
+        uses: aws-actions/amazon-ecs-deploy-task-definition@v1
+        with:
+          task-definition: ${{ steps.render-task-definition.outputs.task-definition }}
+          service: ai-writing-enhancement-frontend-prod
+          cluster: ai-writing-enhancement-prod
+          wait-for-service-stability: true
+
+      - name: Invalidate CloudFront distribution cache
+        run: |
+          aws cloudfront create-invalidation --distribution-id ${{ secrets.CLOUDFRONT_DISTRIBUTION_ID }} --paths "/*"
