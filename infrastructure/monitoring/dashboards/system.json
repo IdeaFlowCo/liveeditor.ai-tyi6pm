@@ -1,0 +1,479 @@
+{
+  "title": "System Infrastructure Dashboard",
+  "uid": "system-infrastructure",
+  "version": 1,
+  "refresh": "1m",
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
+  "templating": {
+    "list": [
+      {
+        "name": "environment",
+        "type": "query",
+        "query": "label_values(environment)",
+        "label": "Environment",
+        "multi": false,
+        "includeAll": false,
+        "description": "Environment selector (dev, staging, production)"
+      },
+      {
+        "name": "cluster",
+        "type": "query",
+        "query": "label_values(ecs_cluster_name)",
+        "label": "Cluster",
+        "multi": false,
+        "includeAll": true,
+        "description": "ECS cluster selector"
+      },
+      {
+        "name": "service",
+        "type": "query",
+        "query": "label_values(ecs_service_name)",
+        "label": "Service",
+        "multi": false,
+        "includeAll": true,
+        "description": "Service name selector"
+      },
+      {
+        "name": "instance",
+        "type": "query",
+        "query": "label_values(instance)",
+        "label": "Instance",
+        "multi": false,
+        "includeAll": true,
+        "description": "EC2 instance selector"
+      },
+      {
+        "name": "asg",
+        "type": "query",
+        "query": {
+          "queryType": "dimension",
+          "namespace": "AWS/AutoScaling",
+          "dimensionKey": "AutoScalingGroupName"
+        },
+        "label": "Auto Scaling Group",
+        "multi": false,
+        "includeAll": false
+      }
+    ]
+  },
+  "panels": [
+    {
+      "title": "System Overview",
+      "type": "row",
+      "panels": [
+        {
+          "title": "CPU Utilization",
+          "type": "graph",
+          "datasource": "Prometheus",
+          "targets": [
+            {
+              "expr": "avg by(service) (rate(process_cpu_seconds_total{environment=\"$environment\", service=~\"$service\"}[5m]) * 100)",
+              "legendFormat": "{{service}}"
+            }
+          ],
+          "thresholds": [
+            {
+              "value": 70,
+              "colorMode": "warning",
+              "op": "gt"
+            },
+            {
+              "value": 85,
+              "colorMode": "critical",
+              "op": "gt"
+            }
+          ],
+          "alert": {
+            "name": "High CPU Utilization",
+            "message": "CPU utilization is above 85% for 5 minutes",
+            "condition": "avg() > 85"
+          }
+        },
+        {
+          "title": "Memory Usage",
+          "type": "graph",
+          "datasource": "Prometheus",
+          "targets": [
+            {
+              "expr": "avg by(service) (sum(container_memory_usage_bytes{environment=\"$environment\", service=~\"$service\"}) by (service) / sum(container_spec_memory_limit_bytes{service=~\"$service\"}) by (service) * 100)",
+              "legendFormat": "{{service}}"
+            }
+          ],
+          "thresholds": [
+            {
+              "value": 70,
+              "colorMode": "warning",
+              "op": "gt"
+            },
+            {
+              "value": 85,
+              "colorMode": "critical",
+              "op": "gt"
+            }
+          ]
+        },
+        {
+          "title": "Service Health Status",
+          "type": "stat",
+          "datasource": "Prometheus",
+          "targets": [
+            {
+              "expr": "up{environment=\"$environment\", job=~\"$service\"}",
+              "legendFormat": "{{job}}"
+            }
+          ],
+          "options": {
+            "reduceOptions": {
+              "values": false,
+              "calcs": ["lastNotNull"],
+              "fields": ""
+            },
+            "orientation": "horizontal",
+            "textMode": "auto",
+            "colorMode": "value",
+            "graphMode": "area",
+            "justifyMode": "auto"
+          },
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "1": {
+                  "text": "UP",
+                  "color": "green"
+                },
+                "0": {
+                  "text": "DOWN",
+                  "color": "red"
+                }
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "title": "Container Health",
+      "type": "row",
+      "panels": [
+        {
+          "title": "Container Restarts",
+          "type": "graph",
+          "datasource": "Prometheus",
+          "targets": [
+            {
+              "expr": "changes(kube_pod_container_status_restarts_total{environment=\"$environment\", service=~\"$service\"}[15m])",
+              "legendFormat": "{{container}}"
+            }
+          ],
+          "thresholds": [
+            {
+              "value": 3,
+              "colorMode": "warning",
+              "op": "gt"
+            },
+            {
+              "value": 5,
+              "colorMode": "critical",
+              "op": "gt"
+            }
+          ],
+          "alert": {
+            "name": "Frequent Container Restarts",
+            "message": "Container restart count is high",
+            "condition": "max() > 3"
+          }
+        },
+        {
+          "title": "Running Containers",
+          "type": "graph",
+          "datasource": "Prometheus",
+          "targets": [
+            {
+              "expr": "sum by(service) (kube_pod_container_status_running{environment=\"$environment\", service=~\"$service\"})",
+              "legendFormat": "{{service}}"
+            }
+          ]
+        },
+        {
+          "title": "Container CPU Throttling",
+          "type": "graph",
+          "datasource": "Prometheus",
+          "targets": [
+            {
+              "expr": "rate(container_cpu_cfs_throttled_seconds_total{environment=\"$environment\", service=~\"$service\"}[5m])",
+              "legendFormat": "{{container}}"
+            }
+          ],
+          "thresholds": [
+            {
+              "value": 0.01,
+              "colorMode": "warning",
+              "op": "gt"
+            },
+            {
+              "value": 0.05,
+              "colorMode": "critical",
+              "op": "gt"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "title": "Disk and Network",
+      "type": "row",
+      "panels": [
+        {
+          "title": "Disk I/O",
+          "type": "graph",
+          "datasource": "Prometheus",
+          "targets": [
+            {
+              "expr": "rate(node_disk_read_bytes_total{environment=\"$environment\", instance=~\"$instance\"}[5m])",
+              "legendFormat": "Read {{device}} {{instance}}"
+            },
+            {
+              "expr": "rate(node_disk_written_bytes_total{environment=\"$environment\", instance=~\"$instance\"}[5m])",
+              "legendFormat": "Write {{device}} {{instance}}"
+            }
+          ]
+        },
+        {
+          "title": "Disk Space Utilization",
+          "type": "gauge",
+          "datasource": "Prometheus",
+          "targets": [
+            {
+              "expr": "(1 - (node_filesystem_avail_bytes{environment=\"$environment\", instance=~\"$instance\", mountpoint=\"/\"} / node_filesystem_size_bytes{environment=\"$environment\", instance=~\"$instance\", mountpoint=\"/\"})) * 100",
+              "legendFormat": "{{instance}}"
+            }
+          ],
+          "options": {
+            "reduceOptions": {
+              "values": false,
+              "calcs": ["mean"],
+              "fields": ""
+            },
+            "orientation": "auto",
+            "showThresholdLabels": false,
+            "showThresholdMarkers": true
+          },
+          "thresholds": [
+            {
+              "value": 75,
+              "colorMode": "warning"
+            },
+            {
+              "value": 90,
+              "colorMode": "critical"
+            }
+          ],
+          "alert": {
+            "name": "Low Disk Space",
+            "message": "Disk space usage is above 90%",
+            "condition": "max() > 90"
+          }
+        },
+        {
+          "title": "Network Traffic",
+          "type": "graph",
+          "datasource": "Prometheus",
+          "targets": [
+            {
+              "expr": "rate(node_network_receive_bytes_total{environment=\"$environment\", instance=~\"$instance\"}[5m])",
+              "legendFormat": "Rx {{device}} {{instance}}"
+            },
+            {
+              "expr": "rate(node_network_transmit_bytes_total{environment=\"$environment\", instance=~\"$instance\"}[5m])",
+              "legendFormat": "Tx {{device}} {{instance}}"
+            }
+          ]
+        },
+        {
+          "title": "Network Errors",
+          "type": "graph",
+          "datasource": "Prometheus",
+          "targets": [
+            {
+              "expr": "rate(node_network_receive_errs_total{environment=\"$environment\", instance=~\"$instance\"}[5m])",
+              "legendFormat": "Rx Errors {{device}} {{instance}}"
+            },
+            {
+              "expr": "rate(node_network_transmit_errs_total{environment=\"$environment\", instance=~\"$instance\"}[5m])",
+              "legendFormat": "Tx Errors {{device}} {{instance}}"
+            }
+          ],
+          "thresholds": [
+            {
+              "value": 1,
+              "colorMode": "warning",
+              "op": "gt"
+            },
+            {
+              "value": 10,
+              "colorMode": "critical",
+              "op": "gt"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "title": "Auto-scaling Metrics",
+      "type": "row",
+      "panels": [
+        {
+          "title": "Service Instances Count",
+          "type": "graph",
+          "datasource": "Prometheus",
+          "targets": [
+            {
+              "expr": "count by(service) (aws_ecs_service_running_tasks{environment=\"$environment\", service=~\"$service\"})",
+              "legendFormat": "{{service}}"
+            }
+          ]
+        },
+        {
+          "title": "Scaling Events",
+          "type": "graph",
+          "datasource": "CloudWatch",
+          "targets": [
+            {
+              "namespace": "AWS/AutoScaling",
+              "metricName": "GroupTotalInstances",
+              "dimensions": {
+                "AutoScalingGroupName": "$asg"
+              },
+              "statistics": ["Average"],
+              "period": "60"
+            }
+          ]
+        },
+        {
+          "title": "Resource Utilization vs. Capacity",
+          "type": "graph",
+          "datasource": "Prometheus",
+          "targets": [
+            {
+              "expr": "sum(rate(process_cpu_seconds_total{environment=\"$environment\", service=~\"$service\"}[5m]) * 100) / count(count by(instance) (process_cpu_seconds_total{environment=\"$environment\", service=~\"$service\"}))",
+              "legendFormat": "CPU Usage %"
+            },
+            {
+              "expr": "sum(container_memory_usage_bytes{environment=\"$environment\", service=~\"$service\"}) / sum(container_spec_memory_limit_bytes{environment=\"$environment\", service=~\"$service\"}) * 100",
+              "legendFormat": "Memory Usage %"
+            }
+          ],
+          "thresholds": [
+            {
+              "value": 70,
+              "colorMode": "warning",
+              "op": "gt",
+              "line": true,
+              "fill": false
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "title": "System Events and Alerts",
+      "type": "row",
+      "panels": [
+        {
+          "title": "Active Alerts",
+          "type": "table",
+          "datasource": "Prometheus",
+          "targets": [
+            {
+              "expr": "ALERTS{environment=\"$environment\", alertstate=\"firing\"}"
+            }
+          ],
+          "options": {
+            "showHeader": true
+          },
+          "fieldConfig": {
+            "overrides": [
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "alertname"
+                },
+                "properties": [
+                  {
+                    "id": "displayName",
+                    "value": "Alert"
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "severity"
+                },
+                "properties": [
+                  {
+                    "id": "mappings",
+                    "value": [
+                      {
+                        "type": "value",
+                        "options": {
+                          "critical": {
+                            "color": "red",
+                            "index": 0
+                          },
+                          "warning": {
+                            "color": "orange",
+                            "index": 1
+                          },
+                          "info": {
+                            "color": "blue",
+                            "index": 2
+                          }
+                        }
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "title": "System Events Timeline",
+          "type": "graph",
+          "datasource": "Prometheus",
+          "targets": [
+            {
+              "expr": "changes(process_start_time_seconds{environment=\"$environment\", service=~\"$service\"}[1h])",
+              "legendFormat": "{{service}} restart"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "annotations": {
+    "list": [
+      {
+        "name": "Deployments",
+        "datasource": "Prometheus",
+        "expr": "changes(kube_deployment_status_observed_generation{environment=\"$environment\"}[1m]) > 0",
+        "tagKeys": ["deployment"],
+        "titleFormat": "Deployment - {{deployment}}",
+        "enable": true
+      },
+      {
+        "name": "Scaling Events",
+        "datasource": "Prometheus",
+        "expr": "changes(kube_deployment_spec_replicas{environment=\"$environment\"}[1m]) > 0",
+        "tagKeys": ["deployment"],
+        "titleFormat": "Scaling - {{deployment}}",
+        "enable": true
+      }
+    ]
+  }
+}
