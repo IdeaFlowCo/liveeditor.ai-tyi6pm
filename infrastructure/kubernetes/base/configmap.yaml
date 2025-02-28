@@ -1,0 +1,181 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: app-config
+  labels:
+    app: ai-writing
+    component: config
+data:
+  # General Environment
+  ENVIRONMENT: "base"
+  API_URL: "/api"
+  WEBSOCKET_URL: "/ws"
+  
+  # Backend Configuration
+  FLASK_APP: "app.py"
+  FLASK_ENV: "production"
+  PORT: "5000"
+  DEBUG: "false"
+  LOG_LEVEL: "INFO"
+  CORS_ENABLED: "true"
+  CORS_ALLOWED_ORIGINS: "http://localhost:3000,http://localhost:8080"
+  
+  # Database Configuration
+  MONGODB_DATABASE: "ai_writing_enhancement"
+  MONGODB_CONNECTION_POOL_SIZE: "100"
+  MONGODB_TIMEOUT_MS: "5000"
+  
+  # Redis Configuration
+  REDIS_DB: "0"
+  REDIS_PREFIX: "ai_writing:"
+  REDIS_TIMEOUT: "3"
+  SESSION_TYPE: "redis"
+  SESSION_PERMANENT: "False"
+  SESSION_USE_SIGNER: "True"
+  SESSION_KEY_PREFIX: "ai_writing_session:"
+  
+  # Storage Configuration
+  S3_BUCKET_NAME: "document-storage"
+  S3_REGION: "us-east-1"
+  S3_DOCUMENT_PREFIX: "documents/"
+  S3_BACKUP_ENABLED: "true"
+  
+  # Authentication Configuration
+  JWT_ACCESS_TOKEN_EXPIRES: "3600"
+  JWT_REFRESH_TOKEN_EXPIRES: "604800"
+  ENABLE_ANONYMOUS_USAGE: "true"
+  ANONYMOUS_SESSION_EXPIRY_HOURS: "24"
+  
+  # AI Service Configuration
+  AI_PROVIDER: "openai"
+  AI_MODEL: "gpt-4"
+  AI_TEMPERATURE: "0.7"
+  AI_MAX_TOKENS: "4000"
+  AI_REQUEST_TIMEOUT: "30"
+  AI_SUGGESTION_CACHE_ENABLED: "true"
+  AI_SUGGESTION_CACHE_TTL: "1800"
+  ENABLE_AI_STREAMING: "false"
+  
+  # Document Settings
+  MAX_DOCUMENT_SIZE_WORDS: "25000"
+  DOCUMENT_VERSION_RETENTION_DAYS: "30"
+  ENABLE_DOCUMENT_VERSIONING: "true"
+  DOCUMENT_AUTOSAVE_ENABLED: "true"
+  DOCUMENT_AUTOSAVE_INTERVAL_SECONDS: "30"
+  
+  # Rate Limiting
+  RATE_LIMIT_DEFAULT: "100"
+  RATE_LIMIT_ANONYMOUS: "10"
+  RATE_LIMIT_AI_SUGGESTIONS: "50"
+  RATE_LIMIT_STRATEGY: "token_bucket"
+  
+  # Feature Flags
+  FEATURE_TRACK_CHANGES: "true"
+  FEATURE_AI_SUGGESTIONS: "true"
+  FEATURE_USER_ACCOUNTS: "true"
+  FEATURE_DOCUMENT_STORAGE: "true"
+  FEATURE_COLLABORATIVE_EDITING: "false"
+  
+  # Frontend Configuration
+  VITE_APP_API_URL: "/api"
+  VITE_APP_ENV: "production"
+  VITE_APP_VERSION: "1.0.0"
+  VITE_APP_FEATURE_ANONYMOUS_USAGE: "true"
+  VITE_APP_FEATURE_CHAT_INTERFACE: "true"
+  VITE_APP_FEATURE_DOCUMENT_STORAGE: "true"
+  VITE_APP_MAX_DOCUMENT_SIZE: "25000"
+  VITE_APP_SESSION_TIMEOUT: "1800000"
+  VITE_APP_TOKEN_REFRESH_BUFFER: "300000"
+  VITE_APP_ENABLE_CONSOLE_LOGS: "false"
+  
+  # Logging Configuration
+  logging-config.json: |-
+    {
+      "version": 1,
+      "disable_existing_loggers": false,
+      "formatters": {
+        "standard": {
+          "format": "%(asctime)s [%(levelname)s] %(name)s: %(message)s"
+        },
+        "json": {
+          "format": "json",
+          "datefmt": "%Y-%m-%d %H:%M:%S"
+        }
+      },
+      "handlers": {
+        "console": {
+          "class": "logging.StreamHandler",
+          "level": "INFO",
+          "formatter": "json",
+          "stream": "ext://sys.stdout"
+        }
+      },
+      "root": {
+        "level": "INFO",
+        "handlers": ["console"],
+        "propagate": true
+      },
+      "loggers": {
+        "werkzeug": {
+          "level": "WARNING",
+          "handlers": ["console"],
+          "propagate": false
+        },
+        "gunicorn.access": {
+          "level": "INFO",
+          "handlers": ["console"],
+          "propagate": false
+        },
+        "gunicorn.error": {
+          "level": "INFO",
+          "handlers": ["console"],
+          "propagate": false
+        }
+      }
+    }
+  
+  # Nginx Configuration
+  nginx.conf: |-
+    server {
+      listen 80;
+      server_name localhost;
+      client_max_body_size 50M;
+
+      location / {
+        root /usr/share/nginx/html;
+        index index.html index.htm;
+        try_files $uri $uri/ /index.html;
+      }
+
+      location /api {
+        proxy_pass http://backend-api-service:5000;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+      }
+
+      location /ws {
+        proxy_pass http://backend-api-service:5000;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+      }
+
+      # Caching static content
+      location ~* \.(js|css|png|jpg|jpeg|gif|ico|svg|woff|woff2|ttf|eot)$ {
+        root /usr/share/nginx/html;
+        expires 30d;
+        add_header Cache-Control "public, no-transform";
+      }
+
+      # Health check endpoint
+      location /health {
+        return 200 'healthy';
+        add_header Content-Type text/plain;
+      }
+    }
