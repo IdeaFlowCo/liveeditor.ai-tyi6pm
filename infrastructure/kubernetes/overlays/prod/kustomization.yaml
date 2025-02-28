@@ -1,0 +1,95 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# Base resources and production-specific resources
+resources:
+- ../../base
+- hpa.yaml
+- pdb.yaml
+- networkpolicy.yaml
+
+# Production namespace and labeling
+namespace: ai-writing-production
+namePrefix: prod-
+commonLabels:
+  environment: production
+  app: ai-writing-enhancement
+  tier: production
+
+# Strategic merge patches for production customization
+patchesStrategicMerge:
+- patches/deployment-patch.yaml
+- patches/service-patch.yaml
+- patches/ingress-patch.yaml
+- patches/configmap-patch.yaml
+- patches/hpa-patch.yaml
+
+# Production configuration values
+configMapGenerator:
+- name: app-config
+  behavior: merge
+  literals:
+  - ENVIRONMENT=production
+  - LOG_LEVEL=INFO
+  - API_URL=https://api.ai-writing-enhancement.com
+  - FRONTEND_URL=https://ai-writing-enhancement.com
+  - ENABLE_ANALYTICS=true
+  - ENABLE_DOCUMENT_VERSIONING=true
+  - FEATURE_TRACK_CHANGES=true
+  - FEATURE_AI_SUGGESTIONS=true
+  - FEATURE_USER_ACCOUNTS=true
+  - FEATURE_DOCUMENT_STORAGE=true
+  - FEATURE_COLLABORATIVE_EDITING=false
+  - MONGODB_CONNECTION_POOL_SIZE=200
+  - REDIS_TIMEOUT=5
+  - AI_REQUEST_TIMEOUT=60
+  - AI_SUGGESTION_CACHE_ENABLED=true
+  - AI_SUGGESTION_CACHE_TTL=3600
+  - RATE_LIMIT_DEFAULT=200
+  - RATE_LIMIT_ANONYMOUS=50
+  - RATE_LIMIT_AI_SUGGESTIONS=100
+
+# Production secrets
+secretGenerator:
+- name: app-secrets
+  behavior: merge
+  files:
+  - secrets/production-secrets.env
+- name: database-credentials
+  behavior: merge
+  files:
+  - secrets/mongodb-credentials.env
+- name: redis-credentials
+  behavior: merge
+  files:
+  - secrets/redis-credentials.env
+- name: openai-credentials
+  behavior: merge
+  files:
+  - secrets/openai-credentials.env
+- name: ai-writing-app-tls-secret
+  files:
+  - secrets/tls.crt
+  - secrets/tls.key
+  type: kubernetes.io/tls
+
+# Container images for production
+images:
+- name: ai-writer-frontend
+  newName: ai-writing-registry.azurecr.io/frontend
+  newTag: 1.0.0
+- name: ai-writer-api
+  newName: ai-writing-registry.azurecr.io/api
+  newTag: 1.0.0
+- name: ai-writer-ai-service
+  newName: ai-writing-registry.azurecr.io/ai-service
+  newTag: 1.0.0
+
+# High availability replica configuration
+replicas:
+- name: frontend-deployment
+  count: 5
+- name: backend-api-deployment
+  count: 8
+- name: ai-service-deployment
+  count: 10
