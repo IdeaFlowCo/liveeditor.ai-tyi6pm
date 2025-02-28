@@ -1,0 +1,199 @@
+{
+  "alertType": "information",
+  "responseTime": "24 hours",
+  "notificationChannels": ["dashboard"],
+  "escalationPath": "backlog",
+  
+  "informationAlerts": [
+    {
+      "name": "frontend_load_time_info",
+      "description": "Information alert for tracking frontend page load time trends",
+      "severity": "information",
+      "metric": "page_load_time",
+      "threshold": 2,
+      "unit": "seconds",
+      "duration": "30m",
+      "component": "Frontend",
+      "notify": ["dashboard"],
+      "response_time": "24h",
+      "runbook_url": "/docs/operations/monitoring.md#performance-optimization",
+      "annotations": {
+        "summary": "Frontend page load time trending upward",
+        "description": "Frontend page load time is trending above 2 seconds over 30 minutes. This doesn't impact users significantly but should be monitored for optimization opportunities."
+      }
+    },
+    {
+      "name": "api_error_rate_info",
+      "description": "Information alert for API error rate minor fluctuations",
+      "severity": "information",
+      "metric": "error_rate_percentage",
+      "threshold": 0.5,
+      "unit": "percent",
+      "duration": "30m",
+      "component": "API Gateway",
+      "notify": ["dashboard"],
+      "response_time": "24h",
+      "runbook_url": "/docs/operations/monitoring.md#api-performance",
+      "annotations": {
+        "summary": "Minor increase in API error rate",
+        "description": "API Gateway error rate is between 0.5% and 1% for over 30 minutes. This is below warning threshold but worth monitoring for potential issues."
+      }
+    },
+    {
+      "name": "ai_suggestion_acceptance_rate",
+      "description": "Information alert for AI suggestion acceptance rate changes",
+      "severity": "information",
+      "metric": "suggestion_acceptance_rate",
+      "threshold": 70,
+      "unit": "percent",
+      "duration": "1d",
+      "component": "AI Service",
+      "notify": ["dashboard"],
+      "response_time": "24h",
+      "runbook_url": "/docs/operations/monitoring.md#ai-quality",
+      "annotations": {
+        "summary": "AI suggestion acceptance rate below target",
+        "description": "AI suggestion acceptance rate is below 70% over 24 hours. This may indicate opportunities to improve suggestion quality or prompt engineering."
+      }
+    },
+    {
+      "name": "document_auto_save_latency",
+      "description": "Information alert for document auto-save latency",
+      "severity": "information",
+      "metric": "auto_save_latency",
+      "threshold": 1,
+      "unit": "seconds",
+      "duration": "1h",
+      "component": "Document Service",
+      "notify": ["dashboard"],
+      "response_time": "24h",
+      "runbook_url": "/docs/operations/monitoring.md#document-performance",
+      "annotations": {
+        "summary": "Document auto-save latency increasing",
+        "description": "Document auto-save operation is taking longer than 1 second on average over 1 hour. This doesn't impact users significantly but may indicate future performance issues."
+      }
+    },
+    {
+      "name": "anonymous_user_conversion_rate",
+      "description": "Information alert for anonymous to registered user conversion",
+      "severity": "information",
+      "metric": "user_conversion_rate",
+      "threshold": 10,
+      "unit": "percent",
+      "duration": "7d",
+      "component": "User Service",
+      "notify": ["dashboard"],
+      "response_time": "24h",
+      "runbook_url": "/docs/operations/monitoring.md#user-analytics",
+      "annotations": {
+        "summary": "Anonymous user conversion rate below target",
+        "description": "Conversion rate from anonymous to registered users is below 10% over the past week. This may indicate opportunities to improve user onboarding or account creation flows."
+      }
+    },
+    {
+      "name": "ai_token_usage_trend",
+      "description": "Information alert for AI token usage trends",
+      "severity": "information",
+      "metric": "token_usage_per_document",
+      "threshold": 2000,
+      "unit": "tokens",
+      "duration": "1d",
+      "component": "AI Service",
+      "notify": ["dashboard"],
+      "response_time": "24h",
+      "runbook_url": "/docs/operations/monitoring.md#cost-optimization",
+      "annotations": {
+        "summary": "AI token usage increasing",
+        "description": "Average token usage per document is above 2000 tokens over 24 hours. This may indicate opportunities for prompt optimization and cost reduction."
+      }
+    },
+    {
+      "name": "user_session_duration",
+      "description": "Information alert for user session duration",
+      "severity": "information",
+      "metric": "average_session_duration",
+      "threshold": 10,
+      "unit": "minutes",
+      "duration": "7d",
+      "component": "Frontend",
+      "notify": ["dashboard"],
+      "response_time": "24h",
+      "runbook_url": "/docs/operations/monitoring.md#user-engagement",
+      "annotations": {
+        "summary": "User session duration below target",
+        "description": "Average user session duration is below 10 minutes over the past week. This may indicate opportunities to improve user engagement and feature discovery."
+      }
+    },
+    {
+      "name": "feature_usage_distribution",
+      "description": "Information alert for feature usage distribution",
+      "severity": "information",
+      "metric": "feature_usage_percentages",
+      "threshold": 20,
+      "unit": "percent_variance",
+      "duration": "7d",
+      "component": "Analytics",
+      "notify": ["dashboard"],
+      "response_time": "24h",
+      "runbook_url": "/docs/operations/monitoring.md#feature-analytics",
+      "annotations": {
+        "summary": "Feature usage distribution imbalance",
+        "description": "Significant imbalance detected in feature usage distribution with some features below 20% of target usage. This may indicate opportunities for feature promotion or UX improvements."
+      }
+    },
+    {
+      "name": "cache_hit_ratio",
+      "description": "Information alert for cache efficiency",
+      "severity": "information",
+      "metric": "cache_hit_ratio",
+      "threshold": 80,
+      "unit": "percent",
+      "duration": "1d",
+      "component": "Redis Cache",
+      "notify": ["dashboard"],
+      "response_time": "24h",
+      "runbook_url": "/docs/operations/monitoring.md#cache-optimization",
+      "annotations": {
+        "summary": "Cache hit ratio below target",
+        "description": "Cache hit ratio is below 80% over 24 hours. This may indicate opportunities to optimize caching strategy and improve performance."
+      }
+    },
+    {
+      "name": "database_query_performance",
+      "description": "Information alert for database query performance",
+      "severity": "information",
+      "metric": "average_query_time",
+      "threshold": 100,
+      "unit": "milliseconds",
+      "duration": "1d",
+      "component": "Database",
+      "notify": ["dashboard"],
+      "response_time": "24h",
+      "runbook_url": "/docs/operations/monitoring.md#database-optimization",
+      "annotations": {
+        "summary": "Database query performance trending slower",
+        "description": "Average database query time is trending above 100ms over 24 hours. This may indicate opportunities for query optimization or index improvements."
+      }
+    }
+  ],
+  
+  "notification_config": {
+    "dashboard": {
+      "dashboard_ids": ["application", "business", "ai-performance", "system"],
+      "display_duration": "7d",
+      "color_scheme": "blue"
+    },
+    "email": {
+      "recipients": ["analytics@example.com"],
+      "frequency": "weekly",
+      "include_trends": true
+    }
+  },
+  
+  "grouping_rules": {
+    "group_by": ["component", "severity"],
+    "group_wait": "60m",
+    "group_interval": "24h",
+    "repeat_interval": "7d"
+  }
+}
