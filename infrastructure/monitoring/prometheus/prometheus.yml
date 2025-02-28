@@ -1,0 +1,138 @@
+# Prometheus configuration file for AI Writing Enhancement system
+# This file defines monitoring targets, scrape intervals, alerting rules, and recording rules
+# Version: 1.0.0
+
+# Global configuration applied to all scrape targets and rules
+global:
+  # How frequently to scrape targets by default
+  scrape_interval: 15s
+  # How frequently to evaluate rules
+  evaluation_interval: 15s
+  # Timeout for scrape requests
+  scrape_timeout: 10s
+
+# Alertmanager configuration - defines where to send alerts
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets:
+            - alertmanager:9093
+
+# Rule files specify the location of rule files to be loaded
+rule_files:
+  - /etc/prometheus/rules/critical_alerts.yml
+  - /etc/prometheus/rules/warning_alerts.yml
+  - /etc/prometheus/rules/recording_rules.yml
+
+# Scrape configuration defines what targets Prometheus will monitor
+scrape_configs:
+  # Prometheus self-monitoring
+  - job_name: prometheus
+    static_configs:
+      - targets:
+          - localhost:9090
+
+  # Frontend service monitoring
+  - job_name: frontend_services
+    metrics_path: /metrics
+    scrape_interval: 10s  # More frequent scraping for user-facing services
+    static_configs:
+      - targets:
+          - frontend:9100
+        labels:
+          service: frontend
+          environment: ${ENV}
+  
+  # Backend API service monitoring
+  - job_name: backend_api_services
+    metrics_path: /metrics
+    scrape_interval: 10s
+    static_configs:
+      - targets:
+          - api:9100
+        labels:
+          service: api
+          environment: ${ENV}
+  
+  # AI orchestration service monitoring
+  - job_name: ai_orchestration_services
+    metrics_path: /metrics
+    scrape_interval: 10s
+    static_configs:
+      - targets:
+          - ai-service:9100
+        labels:
+          service: ai-service
+          environment: ${ENV}
+  
+  # MongoDB monitoring via exporter
+  - job_name: mongodb_exporter
+    metrics_path: /metrics
+    scrape_interval: 30s
+    static_configs:
+      - targets:
+          - mongodb-exporter:9216
+        labels:
+          service: mongodb
+          environment: ${ENV}
+  
+  # Redis monitoring via exporter
+  - job_name: redis_exporter
+    metrics_path: /metrics
+    scrape_interval: 30s
+    static_configs:
+      - targets:
+          - redis-exporter:9121
+        labels:
+          service: redis
+          environment: ${ENV}
+  
+  # System metrics monitoring via node exporter
+  - job_name: node_exporter
+    metrics_path: /metrics
+    scrape_interval: 30s
+    static_configs:
+      - targets:
+          - node-exporter:9100
+        labels:
+          service: system
+          environment: ${ENV}
+  
+  # Container metrics monitoring via cAdvisor
+  - job_name: cadvisor
+    metrics_path: /metrics
+    scrape_interval: 15s
+    static_configs:
+      - targets:
+          - cadvisor:8080
+        labels:
+          service: containers
+          environment: ${ENV}
+  
+  # External endpoint monitoring via blackbox exporter
+  - job_name: blackbox_exporter
+    metrics_path: /metrics
+    scrape_interval: 30s
+    static_configs:
+      - targets:
+          - blackbox-exporter:9115
+        labels:
+          service: blackbox
+          environment: ${ENV}
+  
+  # API Gateway health monitoring using blackbox exporter
+  - job_name: apigateway_health
+    metrics_path: /probe
+    scrape_interval: 30s
+    params:
+      module: [http_2xx]
+      target: [https://api.aiwritingenhancement.com/health/liveness]
+    relabel_configs:
+      - source_labels: [__param_target]
+        target_label: instance
+    static_configs:
+      - targets:
+          - blackbox-exporter:9115
+        labels:
+          service: api-gateway
+          environment: ${ENV}
