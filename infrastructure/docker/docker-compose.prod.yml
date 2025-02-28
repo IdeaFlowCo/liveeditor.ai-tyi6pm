@@ -1,0 +1,201 @@
+version: '3.8'
+
+services:
+  frontend:
+    image: ${DOCKER_REGISTRY}/ai-writing-frontend:${IMAGE_TAG}
+    container_name: ai-writing-frontend
+    restart: always
+    ports:
+      - 80:80
+      - 443:443
+    networks:
+      - ai-writing-network
+    depends_on:
+      - api
+    environment:
+      - NODE_ENV=production
+      - VITE_API_URL=https://api.aiwriting.example.com
+      - VITE_AI_FEATURES_ENABLED=true
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:80/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 1GB
+        reservations:
+          cpus: '0.25'
+          memory: 512MB
+
+  api:
+    image: ${DOCKER_REGISTRY}/ai-writing-api:${IMAGE_TAG}
+    container_name: ai-writing-api
+    restart: always
+    ports:
+      - 5000:5000
+    networks:
+      - ai-writing-network
+    depends_on:
+      - redis
+    environment:
+      - FLASK_ENV=production
+      - FLASK_APP=app.py
+      - MONGODB_URI=${MONGODB_URI}
+      - REDIS_URL=redis://redis:6379/0
+      - JWT_SECRET=${JWT_SECRET}
+      - S3_BUCKET=${S3_BUCKET}
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+      - AWS_DEFAULT_REGION=${AWS_DEFAULT_REGION}
+    volumes:
+      - api_logs:/app/logs
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/api/health/liveness"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 2GB
+        reservations:
+          cpus: '0.5'
+          memory: 1GB
+
+  ai_service:
+    image: ${DOCKER_REGISTRY}/ai-writing-ai-service:${IMAGE_TAG}
+    container_name: ai-writing-ai-service
+    restart: always
+    command: gunicorn --bind 0.0.0.0:5001 --workers 4 --timeout 120 wsgi:app
+    ports:
+      - 5001:5001
+    networks:
+      - ai-writing-network
+    depends_on:
+      - redis
+      - api
+    environment:
+      - FLASK_ENV=production
+      - SERVICE_TYPE=ai
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - MONGODB_URI=${MONGODB_URI}
+      - REDIS_URL=redis://redis:6379/0
+      - AI_MODEL_VERSION=gpt-4
+      - MAX_TOKENS=8192
+      - TOKEN_LIMIT_PER_REQUEST=4096
+    volumes:
+      - ai_logs:/app/logs
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5001/api/health/liveness"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 4GB
+        reservations:
+          cpus: '1.0'
+          memory: 2GB
+
+  redis:
+    image: redis:7.0-alpine
+    container_name: ai-writing-redis
+    restart: always
+    ports:
+      - 6379:6379
+    networks:
+      - ai-writing-network
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD}
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 1GB
+        reservations:
+          cpus: '0.2'
+          memory: 512MB
+
+  prometheus:
+    image: prom/prometheus:v2.40.0
+    container_name: ai-writing-prometheus
+    restart: always
+    ports:
+      - 9090:9090
+    networks:
+      - ai-writing-network
+    volumes:
+      - ../../infrastructure/monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus_data:/prometheus
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --web.console.libraries=/usr/share/prometheus/console_libraries
+      - --web.console.templates=/usr/share/prometheus/consoles
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 1GB
+        reservations:
+          cpus: '0.1'
+          memory: 256MB
+
+  grafana:
+    image: grafana/grafana:9.3.0
+    container_name: ai-writing-grafana
+    restart: always
+    ports:
+      - 3000:3000
+    networks:
+      - ai-writing-network
+    depends_on:
+      - prometheus
+    volumes:
+      - ../../infrastructure/monitoring/grafana/datasources.yml:/etc/grafana/provisioning/datasources/datasources.yml
+      - ../../infrastructure/monitoring/grafana/dashboard-provider.yml:/etc/grafana/provisioning/dashboards/dashboard-provider.yml
+      - ../../infrastructure/monitoring/dashboards:/var/lib/grafana/dashboards
+      - grafana_data:/var/lib/grafana
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD}
+      - GF_USERS_ALLOW_SIGN_UP=false
+      - GF_SERVER_DOMAIN=monitoring.aiwriting.example.com
+      - GF_SMTP_ENABLED=true
+      - GF_SMTP_HOST=${SMTP_HOST}
+      - GF_SMTP_USER=${SMTP_USER}
+      - GF_SMTP_PASSWORD=${SMTP_PASSWORD}
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 1GB
+        reservations:
+          cpus: '0.1'
+          memory: 256MB
+
+networks:
+  ai-writing-network:
+    driver: bridge
+
+volumes:
+  api_logs:
+  ai_logs:
+  redis_data:
+  prometheus_data:
+  grafana_data:
