@@ -1,0 +1,487 @@
+{
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": "-- Grafana --",
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      },
+      {
+        "datasource": "Prometheus",
+        "enable": true,
+        "expr": "changes(ai_service_deployment_status[1m]) > 0",
+        "iconColor": "rgba(255, 96, 96, 1)",
+        "name": "AI Service Deployments",
+        "titleFormat": "AI Service Deployment"
+      }
+    ]
+  },
+  "editable": true,
+  "gnetId": null,
+  "graphTooltip": 0,
+  "id": null,
+  "links": [
+    {
+      "icon": "dashboard",
+      "tags": [],
+      "title": "Application Dashboard",
+      "type": "link",
+      "url": "/d/application"
+    },
+    {
+      "icon": "dashboard",
+      "tags": [],
+      "title": "System Dashboard",
+      "type": "link",
+      "url": "/d/system"
+    }
+  ],
+  "panels": [
+    {
+      "title": "AI Service Overview",
+      "type": "row",
+      "collapsed": false,
+      "panels": []
+    },
+    {
+      "title": "Suggestion Generation Time",
+      "type": "graph",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 1
+      },
+      "id": 1,
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.5, sum(rate(ai_suggestion_generation_seconds_bucket{environment=~\"$environment\"}[5m])) by (le, service))",
+          "legendFormat": "p50 - {{service}}",
+          "refId": "A"
+        },
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(ai_suggestion_generation_seconds_bucket{environment=~\"$environment\"}[5m])) by (le, service))",
+          "legendFormat": "p95 - {{service}}",
+          "refId": "B"
+        },
+        {
+          "expr": "histogram_quantile(0.99, sum(rate(ai_suggestion_generation_seconds_bucket{environment=~\"$environment\"}[5m])) by (le, service))",
+          "legendFormat": "p99 - {{service}}",
+          "refId": "C"
+        }
+      ],
+      "yaxes": [
+        {
+          "format": "s",
+          "min": 0
+        },
+        {
+          "format": "short",
+          "show": false
+        }
+      ],
+      "thresholds": [
+        {
+          "colorMode": "warning",
+          "fill": true,
+          "line": true,
+          "op": "gt",
+          "value": 5,
+          "yaxis": "left"
+        },
+        {
+          "colorMode": "critical",
+          "fill": true,
+          "line": true,
+          "op": "gt",
+          "value": 10,
+          "yaxis": "left"
+        }
+      ],
+      "description": "Time taken to generate AI suggestions for document improvements"
+    },
+    {
+      "title": "Token Usage",
+      "type": "graph",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 1
+      },
+      "id": 2,
+      "targets": [
+        {
+          "expr": "sum(rate(ai_token_usage_total{type=\"prompt\",environment=~\"$environment\"}[5m])) by (service)",
+          "legendFormat": "Prompt - {{service}}",
+          "refId": "A"
+        },
+        {
+          "expr": "sum(rate(ai_token_usage_total{type=\"completion\",environment=~\"$environment\"}[5m])) by (service)",
+          "legendFormat": "Completion - {{service}}",
+          "refId": "B"
+        }
+      ],
+      "yaxes": [
+        {
+          "format": "short",
+          "min": 0
+        },
+        {
+          "format": "short",
+          "show": false
+        }
+      ],
+      "description": "Number of tokens used in AI requests and responses"
+    },
+    {
+      "title": "Suggestion Acceptance Rate",
+      "type": "gauge",
+      "gridPos": {
+        "h": 6,
+        "w": 8,
+        "x": 0,
+        "y": 9
+      },
+      "id": 3,
+      "targets": [
+        {
+          "expr": "sum(rate(ai_suggestion_accepted_total{environment=~\"$environment\"}[30m])) / sum(rate(ai_suggestion_total{environment=~\"$environment\"}[30m])) * 100",
+          "legendFormat": "Acceptance Rate",
+          "refId": "A"
+        }
+      ],
+      "thresholds": [
+        {
+          "color": "red",
+          "value": null
+        },
+        {
+          "color": "yellow",
+          "value": 50
+        },
+        {
+          "color": "green",
+          "value": 70
+        }
+      ],
+      "format": "percent",
+      "min": 0,
+      "max": 100,
+      "description": "Percentage of AI suggestions accepted by users"
+    },
+    {
+      "title": "Suggestion Acceptance by Template",
+      "type": "bar",
+      "gridPos": {
+        "h": 6,
+        "w": 16,
+        "x": 8,
+        "y": 9
+      },
+      "id": 4,
+      "targets": [
+        {
+          "expr": "sum(rate(ai_suggestion_accepted_total{environment=~\"$environment\"}[1h])) by (template) / sum(rate(ai_suggestion_total{environment=~\"$environment\"}[1h])) by (template) * 100",
+          "legendFormat": "{{template}}",
+          "refId": "A"
+        }
+      ],
+      "yaxes": [
+        {
+          "format": "percent",
+          "min": 0,
+          "max": 100
+        },
+        {
+          "format": "short",
+          "show": false
+        }
+      ],
+      "description": "Acceptance rate broken down by improvement template type"
+    },
+    {
+      "title": "AI Processing Details",
+      "type": "row",
+      "collapsed": false,
+      "panels": []
+    },
+    {
+      "title": "AI Request Rate",
+      "type": "graph",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 16
+      },
+      "id": 5,
+      "targets": [
+        {
+          "expr": "sum(rate(ai_request_total{environment=~\"$environment\"}[5m])) by (service, type)",
+          "legendFormat": "{{type}} - {{service}}",
+          "refId": "A"
+        }
+      ],
+      "yaxes": [
+        {
+          "format": "ops",
+          "min": 0
+        },
+        {
+          "format": "short",
+          "show": false
+        }
+      ],
+      "description": "Rate of AI requests by type (suggestions, chat, etc.)"
+    },
+    {
+      "title": "AI Error Rate",
+      "type": "graph",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 16
+      },
+      "id": 6,
+      "targets": [
+        {
+          "expr": "sum(rate(ai_error_total{environment=~\"$environment\"}[5m])) by (service, error_type)",
+          "legendFormat": "{{error_type}} - {{service}}",
+          "refId": "A"
+        }
+      ],
+      "yaxes": [
+        {
+          "format": "ops",
+          "min": 0
+        },
+        {
+          "format": "percent",
+          "show": false
+        }
+      ],
+      "description": "Rate of errors encountered during AI processing"
+    },
+    {
+      "title": "AI Queue Depth",
+      "type": "graph",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 24
+      },
+      "id": 7,
+      "targets": [
+        {
+          "expr": "ai_queue_depth{environment=~\"$environment\"}",
+          "legendFormat": "Queue - {{service}}",
+          "refId": "A"
+        }
+      ],
+      "yaxes": [
+        {
+          "format": "short",
+          "min": 0
+        },
+        {
+          "format": "short",
+          "show": false
+        }
+      ],
+      "thresholds": [
+        {
+          "colorMode": "warning",
+          "fill": true,
+          "line": true,
+          "op": "gt",
+          "value": 50,
+          "yaxis": "left"
+        },
+        {
+          "colorMode": "critical",
+          "fill": true,
+          "line": true,
+          "op": "gt",
+          "value": 100,
+          "yaxis": "left"
+        }
+      ],
+      "description": "Number of requests waiting in the AI processing queue"
+    },
+    {
+      "title": "AI Service Scaling",
+      "type": "graph",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 24
+      },
+      "id": 8,
+      "targets": [
+        {
+          "expr": "sum(ai_service_instances{environment=~\"$environment\"}) by (service)",
+          "legendFormat": "Instances - {{service}}",
+          "refId": "A"
+        }
+      ],
+      "yaxes": [
+        {
+          "format": "short",
+          "min": 0
+        },
+        {
+          "format": "short",
+          "show": false
+        }
+      ],
+      "description": "Number of AI service instances currently running"
+    },
+    {
+      "title": "Resource Utilization",
+      "type": "row",
+      "collapsed": false,
+      "panels": []
+    },
+    {
+      "title": "AI Service CPU Usage",
+      "type": "graph",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 33
+      },
+      "id": 9,
+      "targets": [
+        {
+          "expr": "avg(rate(process_cpu_seconds_total{job=~\"ai-service\",environment=~\"$environment\"}[5m])) by (instance) * 100",
+          "legendFormat": "CPU - {{instance}}",
+          "refId": "A"
+        }
+      ],
+      "yaxes": [
+        {
+          "format": "percent",
+          "min": 0,
+          "max": 100
+        },
+        {
+          "format": "short",
+          "show": false
+        }
+      ],
+      "description": "CPU utilization of AI service instances"
+    },
+    {
+      "title": "AI Service Memory Usage",
+      "type": "graph",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 33
+      },
+      "id": 10,
+      "targets": [
+        {
+          "expr": "process_resident_memory_bytes{job=~\"ai-service\",environment=~\"$environment\"} / 1024 / 1024",
+          "legendFormat": "Memory - {{instance}}",
+          "refId": "A"
+        }
+      ],
+      "yaxes": [
+        {
+          "format": "mbytes",
+          "min": 0
+        },
+        {
+          "format": "short",
+          "show": false
+        }
+      ],
+      "description": "Memory usage of AI service instances"
+    },
+    {
+      "title": "OpenAI API Costs",
+      "type": "graph",
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 41
+      },
+      "id": 11,
+      "targets": [
+        {
+          "expr": "sum(increase(ai_token_cost_dollars_total{environment=~\"$environment\"}[1d])) by (model)",
+          "legendFormat": "{{model}}",
+          "refId": "A"
+        }
+      ],
+      "yaxes": [
+        {
+          "format": "currencyUSD",
+          "min": 0
+        },
+        {
+          "format": "short",
+          "show": false
+        }
+      ],
+      "description": "Estimated daily cost of OpenAI API usage by model"
+    }
+  ],
+  "refresh": "5s",
+  "schemaVersion": 26,
+  "style": "dark",
+  "tags": ["ai", "performance", "monitoring"],
+  "templating": {
+    "list": [
+      {
+        "allValue": null,
+        "current": {
+          "text": "production",
+          "value": "production"
+        },
+        "datasource": "Prometheus",
+        "definition": "label_values(environment)",
+        "hide": 0,
+        "includeAll": false,
+        "label": "Environment",
+        "multi": false,
+        "name": "environment",
+        "options": [],
+        "query": "label_values(environment)",
+        "refresh": 1,
+        "regex": "",
+        "skipUrlSync": false,
+        "sort": 1,
+        "tagValuesQuery": "",
+        "tags": [],
+        "tagsQuery": "",
+        "type": "query",
+        "useTags": false
+      }
+    ]
+  },
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
+  "timepicker": {
+    "refresh_intervals": ["5s", "10s", "30s", "1m", "5m", "15m", "30m", "1h", "2h", "1d"],
+    "time_options": ["5m", "15m", "1h", "6h", "12h", "24h", "2d", "7d", "30d"]
+  },
+  "timezone": "browser",
+  "title": "AI Performance Dashboard",
+  "uid": "ai-performance",
+  "version": 1
+}
