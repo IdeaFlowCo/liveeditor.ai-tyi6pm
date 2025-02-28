@@ -1,0 +1,90 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<dependency-check xmlns="https://jeremylong.github.io/DependencyCheck/dependency-check.2.5.xsd"
+                  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                  xsi:schemaLocation="https://jeremylong.github.io/DependencyCheck/dependency-check.2.5.xsd https://jeremylong.github.io/DependencyCheck/dependency-check.2.5.xsd">
+    
+    <!-- Configure which scanners are enabled -->
+    <scanners>
+        <!-- Frontend dependency scanners -->
+        <nodePackage>true</nodePackage>
+        <npmAudit>true</npmAudit>
+        
+        <!-- Backend dependency scanners -->
+        <pyDist>true</pyDist>
+        <pyPkg>true</pyPkg>
+        
+        <!-- Disable irrelevant scanners -->
+        <jarAnalyzer>false</jarAnalyzer>
+        <assemblyAnalyzer>false</assemblyAnalyzer>
+        <nuspecAnalyzer>false</nuspecAnalyzer>
+        <nexusAnalyzer>false</nexusAnalyzer>
+        <cocoapodsAnalyzer>false</cocoapodsAnalyzer>
+        <swiftPackageManagerAnalyzer>false</swiftPackageManagerAnalyzer>
+        <dartAnalyzer>false</dartAnalyzer>
+        <rubyGemAnalyzer>false</rubyGemAnalyzer>
+        <rubyBundleAuditAnalyzer>false</rubyBundleAuditAnalyzer>
+        <cmakeAnalyzer>false</cmakeAnalyzer>
+    </scanners>
+    
+    <!-- Configure additional analyzers -->
+    <analyzers>
+        <nodeAudit>true</nodeAudit>
+        <retirejs>
+            <enabled>true</enabled>
+            <filterNonVulnerable>true</filterNonVulnerable>
+            <filters>
+                <filter>^\.\/test\/.*</filter>
+                <filter>^\.\/docs\/.*</filter>
+            </filters>
+        </retirejs>
+        <ossIndex>
+            <enabled>true</enabled>
+            <rateLimiting>
+                <enabled>true</enabled>
+            </rateLimiting>
+        </ossIndex>
+    </analyzers>
+    
+    <!-- Configure paths to scan -->
+    <scan>
+        <path>src/web</path>     <!-- Frontend dependencies -->
+        <path>src/backend</path> <!-- Backend dependencies -->
+    </scan>
+    
+    <!-- Configure reporting formats and settings -->
+    <formats>
+        <format>HTML</format>
+        <format>JSON</format>
+        <format>CSV</format>
+        <format>SARIF</format>
+    </formats>
+    <outputDirectory>security/reports/dependency-check</outputDirectory>
+    <failBuildOnCVSS>7.0</failBuildOnCVSS>
+    
+    <!-- Configure vulnerability database updating -->
+    <updater>
+        <enabled>true</enabled>
+        <cveValidForHours>24</cveValidForHours>
+    </updater>
+    
+    <!-- False positive management -->
+    <suppressionFile>security/audit/dependency-check-suppressions.xml</suppressionFile>
+    <hintsFile>security/audit/dependency-check-hints.xml</hintsFile>
+    
+    <!-- Advanced configuration -->
+    <autoUpdate>true</autoUpdate>
+    <connectionTimeout>60000</connectionTimeout>
+    <dataDirectory>security/data</dataDirectory>
+    <skipTestScope>true</skipTestScope>
+    
+    <!-- Proxy settings (commented out by default) -->
+    <!--
+    <proxy>
+        <server>proxy.example.org</server>
+        <port>8080</port>
+        <username>proxyuser</username>
+        <password>proxypass</password>
+        <nonProxyHosts>localhost|*.example.org</nonProxyHosts>
+    </proxy>
+    -->
+</dependency-check>
