@@ -1,0 +1,730 @@
+name: Backend Deployment
+
+on:
+  push:
+    branches:
+      - develop
+      - staging
+      - main
+  pull_request:
+    branches:
+      - develop
+      - staging
+      - main
+    paths:
+      - 'src/backend/**'
+      - 'infrastructure/docker/docker-compose.prod.yml'
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Deployment environment'
+        required: true
+        default: 'dev'
+        type: 'choice'
+        options:
+          - dev
+          - staging
+          - prod
+
+concurrency:
+  group: backend-deploy-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  ECR_REPOSITORY: ai-writing-enhancement-backend
+  AWS_REGION: us-east-1
+  PYTHON_VERSION: '3.10'
+
+jobs:
+  test:
+    name: Run Backend Tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+        
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          
+      - name: Cache Python dependencies
+        uses: actions/cache@v3
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('src/backend/requirements*.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+            
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r src/backend/requirements-dev.txt
+          pip install -r src/backend/requirements.txt
+          
+      - name: Run tests with coverage
+        run: |
+          cd src/backend
+          pytest --cov=. --cov-report=xml --cov-report=term-missing --junitxml=test-results.xml
+          
+      - name: Check coverage thresholds
+        run: |
+          cd src/backend
+          coverage report --fail-under=80
+          
+      - name: Upload test results
+        uses: actions/upload-artifact@v3
+        if: always()
+        with:
+          name: test-results
+          path: src/backend/test-results.xml
+          
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v3
+        with:
+          name: coverage-report
+          path: src/backend/coverage.xml
+
+  security_scan:
+    name: Run Security Scan
+    needs: [test]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+        
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install safety bandit
+          pip install -r src/backend/requirements.txt
+          
+      - name: Run safety check
+        run: |
+          safety check -r src/backend/requirements.txt
+          safety check -r src/backend/requirements-dev.txt
+          
+      - name: Run bandit
+        run: |
+          bandit -r src/backend -f json -o security-report.json
+          
+      - name: Upload security scan results
+        uses: actions/upload-artifact@v3
+        with:
+          name: security-report
+          path: security-report.json
+
+  build_and_push_image:
+    name: Build and Push Docker Image
+    needs: [security_scan]
+    runs-on: ubuntu-latest
+    outputs:
+      image_uri: ${{ steps.set-image-uri.outputs.image_uri }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+        
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+          
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v1
+        
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+        
+      - name: Build Docker image for scanning
+        uses: docker/build-push-action@v4
+        with:
+          context: .
+          file: infrastructure/docker/backend/Dockerfile
+          push: false
+          load: true
+          tags: ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          
+      - name: Scan image for vulnerabilities
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ github.sha }}
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+          exit-code: '1'
+          severity: 'CRITICAL,HIGH'
+          
+      - name: Upload vulnerability scan results
+        uses: actions/upload-artifact@v3
+        if: always()
+        with:
+          name: trivy-results
+          path: trivy-results.sarif
+          
+      - name: Push Docker image to ECR
+        uses: docker/build-push-action@v4
+        with:
+          context: .
+          file: infrastructure/docker/backend/Dockerfile
+          push: true
+          tags: |
+            ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ github.sha }}
+            ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:latest
+            ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ github.ref == 'refs/heads/main' && 'prod' || github.ref == 'refs/heads/staging' && 'staging' || 'dev' }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          
+      - name: Set image URI output
+        id: set-image-uri
+        run: |
+          echo "image_uri=${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ github.sha }}" >> $GITHUB_OUTPUT
+
+  deploy_dev:
+    name: Deploy to Development
+    needs: [build_and_push_image]
+    if: github.ref == 'refs/heads/develop' || (github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'dev')
+    runs-on: ubuntu-latest
+    environment: development
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+        
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+          
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v1
+        
+      - name: Download API service task definition
+        run: |
+          aws ecs describe-task-definition \
+            --task-definition ai-writing-api-service \
+            --query taskDefinition > api-service-task-definition.json
+            
+      - name: Download AI service task definition
+        run: |
+          aws ecs describe-task-definition \
+            --task-definition ai-writing-ai-service \
+            --query taskDefinition > ai-service-task-definition.json
+            
+      - name: Update API service task definition
+        id: api-task-def
+        uses: aws-actions/amazon-ecs-render-task-definition@v1
+        with:
+          task-definition: api-service-task-definition.json
+          container-name: ai-writing-api-container
+          image: ${{ needs.build_and_push_image.outputs.image_uri }}
+          
+      - name: Update AI service task definition
+        id: ai-task-def
+        uses: aws-actions/amazon-ecs-render-task-definition@v1
+        with:
+          task-definition: ai-service-task-definition.json
+          container-name: ai-writing-ai-container
+          image: ${{ needs.build_and_push_image.outputs.image_uri }}
+          
+      - name: Deploy API service
+        uses: aws-actions/amazon-ecs-deploy-task-definition@v1
+        with:
+          task-definition: ${{ steps.api-task-def.outputs.task-definition }}
+          service: ai-writing-api-service
+          cluster: ai-writing-dev
+          wait-for-service-stability: true
+          
+      - name: Deploy AI service
+        uses: aws-actions/amazon-ecs-deploy-task-definition@v1
+        with:
+          task-definition: ${{ steps.ai-task-def.outputs.task-definition }}
+          service: ai-writing-ai-service
+          cluster: ai-writing-dev
+          wait-for-service-stability: true
+          
+      - name: Verify health checks
+        run: |
+          # Health check against dev API endpoint
+          API_ENDPOINT=$(aws ecs describe-services --cluster ai-writing-dev --services ai-writing-api-service --query 'services[0].loadBalancers[0].targetGroupArn' --output text | xargs aws elbv2 describe-target-groups --target-group-arns --query 'TargetGroups[0].LoadBalancerArns[0]' --output text | xargs aws elbv2 describe-load-balancers --load-balancer-arns --query 'LoadBalancers[0].DNSName' --output text)
+          
+          HEALTH_CHECK_RESULT=$(curl -s -o /dev/null -w "%{http_code}" https://${API_ENDPOINT}/api/health)
+          if [ "$HEALTH_CHECK_RESULT" != "200" ]; then
+            echo "Health check failed with status $HEALTH_CHECK_RESULT"
+            exit 1
+          fi
+          echo "Health check passed with status $HEALTH_CHECK_RESULT"
+          
+      - name: Rollback on failure
+        if: failure()
+        run: |
+          echo "Deployment failed, rolling back to previous version"
+          # Revert to previous task definition for both services
+          aws ecs update-service --cluster ai-writing-dev --service ai-writing-api-service --task-definition ai-writing-api-service:$(( $(aws ecs describe-task-definition --task-definition ai-writing-api-service --query 'taskDefinition.revision' --output text) - 1 ))
+          aws ecs update-service --cluster ai-writing-dev --service ai-writing-ai-service --task-definition ai-writing-ai-service:$(( $(aws ecs describe-task-definition --task-definition ai-writing-ai-service --query 'taskDefinition.revision' --output text) - 1 ))
+
+  deploy_staging:
+    name: Deploy to Staging (Blue/Green)
+    needs: [build_and_push_image]
+    if: github.ref == 'refs/heads/staging' || (github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'staging')
+    runs-on: ubuntu-latest
+    environment: staging
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+        
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+          
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v1
+        
+      - name: Create new target groups for blue/green deployment
+        id: create-target-groups
+        run: |
+          # Create temporary target groups for the green deployment
+          API_TG_ARN=$(aws elbv2 create-target-group --name ai-writing-api-green-$(date +%Y%m%d%H%M%S) --protocol HTTPS --port 443 --vpc-id $(aws ec2 describe-vpcs --filters "Name=tag:Name,Values=ai-writing-vpc" --query "Vpcs[0].VpcId" --output text) --health-check-path /api/health --health-check-protocol HTTPS --query 'TargetGroups[0].TargetGroupArn' --output text)
+          
+          AI_TG_ARN=$(aws elbv2 create-target-group --name ai-writing-ai-green-$(date +%Y%m%d%H%M%S) --protocol HTTPS --port 443 --vpc-id $(aws ec2 describe-vpcs --filters "Name=tag:Name,Values=ai-writing-vpc" --query "Vpcs[0].VpcId" --output text) --health-check-path /ai/health --health-check-protocol HTTPS --query 'TargetGroups[0].TargetGroupArn' --output text)
+          
+          echo "api_target_group=$API_TG_ARN" >> $GITHUB_OUTPUT
+          echo "ai_target_group=$AI_TG_ARN" >> $GITHUB_OUTPUT
+            
+      - name: Download API service task definition
+        run: |
+          aws ecs describe-task-definition \
+            --task-definition ai-writing-api-service \
+            --query taskDefinition > api-service-task-definition.json
+            
+      - name: Download AI service task definition
+        run: |
+          aws ecs describe-task-definition \
+            --task-definition ai-writing-ai-service \
+            --query taskDefinition > ai-service-task-definition.json
+            
+      - name: Update API service task definition
+        id: api-task-def
+        uses: aws-actions/amazon-ecs-render-task-definition@v1
+        with:
+          task-definition: api-service-task-definition.json
+          container-name: ai-writing-api-container
+          image: ${{ needs.build_and_push_image.outputs.image_uri }}
+          
+      - name: Update AI service task definition
+        id: ai-task-def
+        uses: aws-actions/amazon-ecs-render-task-definition@v1
+        with:
+          task-definition: ai-service-task-definition.json
+          container-name: ai-writing-ai-container
+          image: ${{ needs.build_and_push_image.outputs.image_uri }}
+          
+      - name: Deploy API service (Green)
+        uses: aws-actions/amazon-ecs-deploy-task-definition@v1
+        with:
+          task-definition: ${{ steps.api-task-def.outputs.task-definition }}
+          service: ai-writing-api-service
+          cluster: ai-writing-staging
+          load-balancer-target-group: ${{ steps.create-target-groups.outputs.api_target_group }}
+          wait-for-service-stability: true
+          
+      - name: Deploy AI service (Green)
+        uses: aws-actions/amazon-ecs-deploy-task-definition@v1
+        with:
+          task-definition: ${{ steps.ai-task-def.outputs.task-definition }}
+          service: ai-writing-ai-service
+          cluster: ai-writing-staging
+          load-balancer-target-group: ${{ steps.create-target-groups.outputs.ai_target_group }}
+          wait-for-service-stability: true
+          
+      - name: Verify health checks on Green deployment
+        run: |
+          # Get load balancer DNS
+          LB_DNS=$(aws elbv2 describe-load-balancers --load-balancer-arns $(aws elbv2 describe-target-groups --target-group-arns ${{ steps.create-target-groups.outputs.api_target_group }} --query 'TargetGroups[0].LoadBalancerArns[0]' --output text) --query 'LoadBalancers[0].DNSName' --output text)
+          
+          # Check API health
+          API_HEALTH=$(curl -s -o /dev/null -w "%{http_code}" https://${LB_DNS}/api/health)
+          if [ "$API_HEALTH" != "200" ]; then
+            echo "API health check failed with status $API_HEALTH"
+            exit 1
+          fi
+          
+          # Check AI health
+          AI_HEALTH=$(curl -s -o /dev/null -w "%{http_code}" https://${LB_DNS}/ai/health)
+          if [ "$AI_HEALTH" != "200" ]; then
+            echo "AI health check failed with status $AI_HEALTH"
+            exit 1
+          fi
+          
+          echo "Green deployment health checks passed"
+          
+      - name: Shift traffic to Green deployment
+        if: success()
+        run: |
+          # Get current listener ARNs
+          API_LISTENER_ARN=$(aws elbv2 describe-listeners --load-balancer-arn $(aws elbv2 describe-target-groups --target-group-arns ${{ steps.create-target-groups.outputs.api_target_group }} --query 'TargetGroups[0].LoadBalancerArns[0]' --output text) --query 'Listeners[?Port==`443`].ListenerArn' --output text)
+          
+          # Get current target groups (blue)
+          BLUE_API_TG_ARN=$(aws elbv2 describe-listeners --listener-arns $API_LISTENER_ARN --query 'Listeners[0].DefaultActions[0].TargetGroupArn' --output text)
+          
+          # Update listener to use green target groups
+          aws elbv2 modify-listener --listener-arn $API_LISTENER_ARN --default-actions Type=forward,TargetGroupArn=${{ steps.create-target-groups.outputs.api_target_group }}
+          
+          echo "Traffic shifted to green deployment"
+          
+          # Store blue target group ARN for potential rollback
+          echo "blue_api_tg=$BLUE_API_TG_ARN" >> $GITHUB_ENV
+          
+      - name: Monitor green deployment
+        run: |
+          # Monitor for 5 minutes to ensure stability
+          for i in {1..30}; do
+            API_HEALTH=$(curl -s -o /dev/null -w "%{http_code}" https://${LB_DNS}/api/health)
+            AI_HEALTH=$(curl -s -o /dev/null -w "%{http_code}" https://${LB_DNS}/ai/health)
+            
+            if [ "$API_HEALTH" != "200" ] || [ "$AI_HEALTH" != "200" ]; then
+              echo "Health check failed during monitoring, rolling back"
+              exit 1
+            fi
+            
+            echo "Health check #$i passed"
+            sleep 10
+          done
+          
+      - name: Terminate Blue deployment
+        if: success()
+        run: |
+          # De-register instances from blue target group
+          BLUE_TARGETS=$(aws elbv2 describe-target-health --target-group-arn ${{ env.blue_api_tg }} --query 'TargetHealthDescriptions[].Target.Id' --output text)
+          
+          for TARGET in $BLUE_TARGETS; do
+            aws elbv2 deregister-targets --target-group-arn ${{ env.blue_api_tg }} --targets Id=$TARGET
+          done
+          
+          echo "Blue deployment terminated"
+          
+      - name: Rollback on failure
+        if: failure()
+        run: |
+          # If we have a blue target group ARN, revert the listener to it
+          if [ -n "${{ env.blue_api_tg }}" ]; then
+            API_LISTENER_ARN=$(aws elbv2 describe-listeners --load-balancer-arn $(aws elbv2 describe-target-groups --target-group-arns ${{ steps.create-target-groups.outputs.api_target_group }} --query 'TargetGroups[0].LoadBalancerArns[0]' --output text) --query 'Listeners[?Port==`443`].ListenerArn' --output text)
+            
+            aws elbv2 modify-listener --listener-arn $API_LISTENER_ARN --default-actions Type=forward,TargetGroupArn=${{ env.blue_api_tg }}
+            
+            echo "Rolled back to blue deployment"
+          else
+            echo "No blue deployment information available for rollback"
+          fi
+
+  deploy_prod:
+    name: Deploy to Production (Canary)
+    needs: [build_and_push_image]
+    if: github.ref == 'refs/heads/main' || (github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'prod')
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+        
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+          
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v1
+        
+      - name: Download API service task definition
+        run: |
+          aws ecs describe-task-definition \
+            --task-definition ai-writing-api-service \
+            --query taskDefinition > api-service-task-definition.json
+            
+      - name: Download AI service task definition
+        run: |
+          aws ecs describe-task-definition \
+            --task-definition ai-writing-ai-service \
+            --query taskDefinition > ai-service-task-definition.json
+            
+      - name: Update API service task definition
+        id: api-task-def
+        uses: aws-actions/amazon-ecs-render-task-definition@v1
+        with:
+          task-definition: api-service-task-definition.json
+          container-name: ai-writing-api-container
+          image: ${{ needs.build_and_push_image.outputs.image_uri }}
+          
+      - name: Update AI service task definition
+        id: ai-task-def
+        uses: aws-actions/amazon-ecs-render-task-definition@v1
+        with:
+          task-definition: ai-service-task-definition.json
+          container-name: ai-writing-ai-container
+          image: ${{ needs.build_and_push_image.outputs.image_uri }}
+          
+      - name: Setup for canary deployment
+        id: canary-setup
+        run: |
+          # Get existing services info
+          API_CLUSTER="ai-writing-prod"
+          API_SERVICE="ai-writing-api-service"
+          AI_SERVICE="ai-writing-ai-service"
+          
+          # Create canary version of the services (10% traffic)
+          aws ecs create-service \
+            --cluster $API_CLUSTER \
+            --service-name "${API_SERVICE}-canary" \
+            --task-definition ${{ steps.api-task-def.outputs.task-definition }} \
+            --desired-count 1 \
+            --deployment-configuration "deploymentCircuitBreaker={enable=true,rollback=true},maximumPercent=200,minimumHealthyPercent=100" \
+            --network-configuration "$(aws ecs describe-services --cluster $API_CLUSTER --services $API_SERVICE --query 'services[0].networkConfiguration' --output json)" \
+            --load-balancers "$(aws ecs describe-services --cluster $API_CLUSTER --services $API_SERVICE --query 'services[0].loadBalancers' --output json)"
+            
+          aws ecs create-service \
+            --cluster $API_CLUSTER \
+            --service-name "${AI_SERVICE}-canary" \
+            --task-definition ${{ steps.ai-task-def.outputs.task-definition }} \
+            --desired-count 1 \
+            --deployment-configuration "deploymentCircuitBreaker={enable=true,rollback=true},maximumPercent=200,minimumHealthyPercent=100" \
+            --network-configuration "$(aws ecs describe-services --cluster $API_CLUSTER --services $AI_SERVICE --query 'services[0].networkConfiguration' --output json)" \
+            --load-balancers "$(aws ecs describe-services --cluster $API_CLUSTER --services $AI_SERVICE --query 'services[0].loadBalancers' --output json)"
+            
+          echo "canary_api_service=${API_SERVICE}-canary" >> $GITHUB_OUTPUT
+          echo "canary_ai_service=${AI_SERVICE}-canary" >> $GITHUB_OUTPUT
+          echo "main_api_service=${API_SERVICE}" >> $GITHUB_OUTPUT
+          echo "main_ai_service=${AI_SERVICE}" >> $GITHUB_OUTPUT
+          echo "cluster=${API_CLUSTER}" >> $GITHUB_OUTPUT
+          
+      - name: Configure AWS Application Load Balancer for canary traffic (10%)
+        run: |
+          # Get listener ARNs
+          API_LISTENER_ARN=$(aws elbv2 describe-listeners --load-balancer-arn $(aws ecs describe-services --cluster ${{ steps.canary-setup.outputs.cluster }} --services ${{ steps.canary-setup.outputs.main_api_service }} --query 'services[0].loadBalancers[0].targetGroupArn' --output text | xargs aws elbv2 describe-target-groups --target-group-arns --query 'TargetGroups[0].LoadBalancerArns[0]' --output text) --query 'Listeners[?Port==`443`].ListenerArn' --output text)
+          
+          # Get target group ARNs
+          MAIN_TG_ARN=$(aws ecs describe-services --cluster ${{ steps.canary-setup.outputs.cluster }} --services ${{ steps.canary-setup.outputs.main_api_service }} --query 'services[0].loadBalancers[0].targetGroupArn' --output text)
+          CANARY_TG_ARN=$(aws ecs describe-services --cluster ${{ steps.canary-setup.outputs.cluster }} --services ${{ steps.canary-setup.outputs.canary_api_service }} --query 'services[0].loadBalancers[0].targetGroupArn' --output text)
+          
+          # Setup weighted target groups (90% main, 10% canary)
+          aws elbv2 modify-listener --listener-arn $API_LISTENER_ARN --default-actions Type=forward,ForwardConfig="{TargetGroups=[{TargetGroupArn=$MAIN_TG_ARN,Weight=90},{TargetGroupArn=$CANARY_TG_ARN,Weight=10}]}"
+          
+          echo "Canary deployment receiving 10% of traffic"
+          
+      - name: Monitor canary health (10%)
+        run: |
+          # Monitor canary health for 5 minutes
+          LB_DNS=$(aws elbv2 describe-load-balancers --load-balancer-arns $(aws ecs describe-services --cluster ${{ steps.canary-setup.outputs.cluster }} --services ${{ steps.canary-setup.outputs.main_api_service }} --query 'services[0].loadBalancers[0].targetGroupArn' --output text | xargs aws elbv2 describe-target-groups --target-group-arns --query 'TargetGroups[0].LoadBalancerArns[0]' --output text) --query 'LoadBalancers[0].DNSName' --output text)
+          
+          for i in {1..30}; do
+            HEALTH_CHECK=$(curl -s -o /dev/null -w "%{http_code}" https://${LB_DNS}/api/health)
+            if [ "$HEALTH_CHECK" != "200" ]; then
+              echo "Canary health check failed with status $HEALTH_CHECK"
+              exit 1
+            fi
+            echo "Canary health check #$i passed"
+            sleep 10
+          done
+          
+      - name: Increase canary traffic (25%)
+        if: success()
+        run: |
+          API_LISTENER_ARN=$(aws elbv2 describe-listeners --load-balancer-arn $(aws ecs describe-services --cluster ${{ steps.canary-setup.outputs.cluster }} --services ${{ steps.canary-setup.outputs.main_api_service }} --query 'services[0].loadBalancers[0].targetGroupArn' --output text | xargs aws elbv2 describe-target-groups --target-group-arns --query 'TargetGroups[0].LoadBalancerArns[0]' --output text) --query 'Listeners[?Port==`443`].ListenerArn' --output text)
+          
+          MAIN_TG_ARN=$(aws ecs describe-services --cluster ${{ steps.canary-setup.outputs.cluster }} --services ${{ steps.canary-setup.outputs.main_api_service }} --query 'services[0].loadBalancers[0].targetGroupArn' --output text)
+          CANARY_TG_ARN=$(aws ecs describe-services --cluster ${{ steps.canary-setup.outputs.cluster }} --services ${{ steps.canary-setup.outputs.canary_api_service }} --query 'services[0].loadBalancers[0].targetGroupArn' --output text)
+          
+          # Update to 75% main, 25% canary
+          aws elbv2 modify-listener --listener-arn $API_LISTENER_ARN --default-actions Type=forward,ForwardConfig="{TargetGroups=[{TargetGroupArn=$MAIN_TG_ARN,Weight=75},{TargetGroupArn=$CANARY_TG_ARN,Weight=25}]}"
+          
+          echo "Canary deployment receiving 25% of traffic"
+          
+      - name: Monitor canary health (25%)
+        if: success()
+        run: |
+          # Monitor for 5 minutes
+          LB_DNS=$(aws elbv2 describe-load-balancers --load-balancer-arns $(aws ecs describe-services --cluster ${{ steps.canary-setup.outputs.cluster }} --services ${{ steps.canary-setup.outputs.main_api_service }} --query 'services[0].loadBalancers[0].targetGroupArn' --output text | xargs aws elbv2 describe-target-groups --target-group-arns --query 'TargetGroups[0].LoadBalancerArns[0]' --output text) --query 'LoadBalancers[0].DNSName' --output text)
+          
+          for i in {1..30}; do
+            HEALTH_CHECK=$(curl -s -o /dev/null -w "%{http_code}" https://${LB_DNS}/api/health)
+            if [ "$HEALTH_CHECK" != "200" ]; then
+              echo "Health check failed with status $HEALTH_CHECK at 25% traffic"
+              exit 1
+            fi
+            echo "Health check #$i passed at 25% traffic"
+            sleep 10
+          done
+          
+      - name: Increase canary traffic (50%)
+        if: success()
+        run: |
+          API_LISTENER_ARN=$(aws elbv2 describe-listeners --load-balancer-arn $(aws ecs describe-services --cluster ${{ steps.canary-setup.outputs.cluster }} --services ${{ steps.canary-setup.outputs.main_api_service }} --query 'services[0].loadBalancers[0].targetGroupArn' --output text | xargs aws elbv2 describe-target-groups --target-group-arns --query 'TargetGroups[0].LoadBalancerArns[0]' --output text) --query 'Listeners[?Port==`443`].ListenerArn' --output text)
+          
+          MAIN_TG_ARN=$(aws ecs describe-services --cluster ${{ steps.canary-setup.outputs.cluster }} --services ${{ steps.canary-setup.outputs.main_api_service }} --query 'services[0].loadBalancers[0].targetGroupArn' --output text)
+          CANARY_TG_ARN=$(aws ecs describe-services --cluster ${{ steps.canary-setup.outputs.cluster }} --services ${{ steps.canary-setup.outputs.canary_api_service }} --query 'services[0].loadBalancers[0].targetGroupArn' --output text)
+          
+          # Update to 50-50 split
+          aws elbv2 modify-listener --listener-arn $API_LISTENER_ARN --default-actions Type=forward,ForwardConfig="{TargetGroups=[{TargetGroupArn=$MAIN_TG_ARN,Weight=50},{TargetGroupArn=$CANARY_TG_ARN,Weight=50}]}"
+          
+          echo "Canary deployment receiving 50% of traffic"
+          
+      - name: Monitor canary health (50%)
+        if: success()
+        run: |
+          # Monitor for 5 minutes
+          LB_DNS=$(aws elbv2 describe-load-balancers --load-balancer-arns $(aws ecs describe-services --cluster ${{ steps.canary-setup.outputs.cluster }} --services ${{ steps.canary-setup.outputs.main_api_service }} --query 'services[0].loadBalancers[0].targetGroupArn' --output text | xargs aws elbv2 describe-target-groups --target-group-arns --query 'TargetGroups[0].LoadBalancerArns[0]' --output text) --query 'LoadBalancers[0].DNSName' --output text)
+          
+          for i in {1..30}; do
+            HEALTH_CHECK=$(curl -s -o /dev/null -w "%{http_code}" https://${LB_DNS}/api/health)
+            if [ "$HEALTH_CHECK" != "200" ]; then
+              echo "Health check failed with status $HEALTH_CHECK at 50% traffic"
+              exit 1
+            fi
+            echo "Health check #$i passed at 50% traffic"
+            sleep 10
+          done
+          
+      - name: Complete deployment (100%)
+        if: success()
+        run: |
+          # Update main service with new task definition
+          aws ecs update-service \
+            --cluster ${{ steps.canary-setup.outputs.cluster }} \
+            --service ${{ steps.canary-setup.outputs.main_api_service }} \
+            --task-definition ${{ steps.api-task-def.outputs.task-definition }} \
+            --force-new-deployment
+            
+          aws ecs update-service \
+            --cluster ${{ steps.canary-setup.outputs.cluster }} \
+            --service ${{ steps.canary-setup.outputs.main_ai_service }} \
+            --task-definition ${{ steps.ai-task-def.outputs.task-definition }} \
+            --force-new-deployment
+            
+          # Wait for service stability
+          aws ecs wait services-stable \
+            --cluster ${{ steps.canary-setup.outputs.cluster }} \
+            --services ${{ steps.canary-setup.outputs.main_api_service }} ${{ steps.canary-setup.outputs.main_ai_service }}
+            
+          # Reset traffic to 100% main service
+          API_LISTENER_ARN=$(aws elbv2 describe-listeners --load-balancer-arn $(aws ecs describe-services --cluster ${{ steps.canary-setup.outputs.cluster }} --services ${{ steps.canary-setup.outputs.main_api_service }} --query 'services[0].loadBalancers[0].targetGroupArn' --output text | xargs aws elbv2 describe-target-groups --target-group-arns --query 'TargetGroups[0].LoadBalancerArns[0]' --output text) --query 'Listeners[?Port==`443`].ListenerArn' --output text)
+          
+          MAIN_TG_ARN=$(aws ecs describe-services --cluster ${{ steps.canary-setup.outputs.cluster }} --services ${{ steps.canary-setup.outputs.main_api_service }} --query 'services[0].loadBalancers[0].targetGroupArn' --output text)
+          
+          aws elbv2 modify-listener --listener-arn $API_LISTENER_ARN --default-actions Type=forward,TargetGroupArn=$MAIN_TG_ARN
+          
+          # Delete canary services
+          aws ecs delete-service --cluster ${{ steps.canary-setup.outputs.cluster }} --service ${{ steps.canary-setup.outputs.canary_api_service }} --force
+          aws ecs delete-service --cluster ${{ steps.canary-setup.outputs.cluster }} --service ${{ steps.canary-setup.outputs.canary_ai_service }} --force
+          
+          echo "Deployment complete, 100% traffic on updated main service"
+          
+      - name: Rollback on failure
+        if: failure()
+        run: |
+          echo "Deployment failed, rolling back"
+          
+          # Remove canary services
+          aws ecs delete-service --cluster ${{ steps.canary-setup.outputs.cluster }} --service ${{ steps.canary-setup.outputs.canary_api_service }} --force || true
+          aws ecs delete-service --cluster ${{ steps.canary-setup.outputs.cluster }} --service ${{ steps.canary-setup.outputs.canary_ai_service }} --force || true
+          
+          # Reset traffic to 100% main service with original task definition
+          API_LISTENER_ARN=$(aws elbv2 describe-listeners --load-balancer-arn $(aws ecs describe-services --cluster ${{ steps.canary-setup.outputs.cluster }} --services ${{ steps.canary-setup.outputs.main_api_service }} --query 'services[0].loadBalancers[0].targetGroupArn' --output text | xargs aws elbv2 describe-target-groups --target-group-arns --query 'TargetGroups[0].LoadBalancerArns[0]' --output text) --query 'Listeners[?Port==`443`].ListenerArn' --output text)
+          
+          MAIN_TG_ARN=$(aws ecs describe-services --cluster ${{ steps.canary-setup.outputs.cluster }} --services ${{ steps.canary-setup.outputs.main_api_service }} --query 'services[0].loadBalancers[0].targetGroupArn' --output text)
+          
+          aws elbv2 modify-listener --listener-arn $API_LISTENER_ARN --default-actions Type=forward,TargetGroupArn=$MAIN_TG_ARN
+          
+          echo "Rollback complete"
+          
+      - name: Update deployment documentation
+        if: success()
+        run: |
+          # Create deployment record
+          DEPLOY_DATE=$(date +"%Y-%m-%d %H:%M:%S")
+          DEPLOY_SHA=${{ github.sha }}
+          DEPLOY_VERSION=$(echo ${{ needs.build_and_push_image.outputs.image_uri }} | cut -d ':' -f 2)
+          
+          echo "Deployment completed at: $DEPLOY_DATE" > deployment-info.txt
+          echo "Commit SHA: $DEPLOY_SHA" >> deployment-info.txt
+          echo "Image version: $DEPLOY_VERSION" >> deployment-info.txt
+          echo "Deployed by: ${{ github.actor }}" >> deployment-info.txt
+          
+          # In a real scenario, this could update a deployment tracking system
+          # or upload the file to S3/documentation system
+          
+          cat deployment-info.txt
+
+  notify:
+    name: Send Notifications
+    needs: [deploy_dev, deploy_staging, deploy_prod]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check deployment status
+        id: check
+        run: |
+          if [[ "${{ needs.deploy_dev.result }}" == "success" || "${{ needs.deploy_staging.result }}" == "success" || "${{ needs.deploy_prod.result }}" == "success" ]]; then
+            echo "deployment_successful=true" >> $GITHUB_OUTPUT
+          else
+            echo "deployment_successful=false" >> $GITHUB_OUTPUT
+          fi
+          
+      - name: Prepare notification content
+        run: |
+          if [[ "${{ steps.check.outputs.deployment_successful }}" == "true" ]]; then
+            echo "NOTIFICATION_TITLE=✅ Backend deployment successful" >> $GITHUB_ENV
+            echo "NOTIFICATION_COLOR=#36a64f" >> $GITHUB_ENV
+          else
+            echo "NOTIFICATION_TITLE=❌ Backend deployment failed" >> $GITHUB_ENV
+            echo "NOTIFICATION_COLOR=#ff0000" >> $GITHUB_ENV
+          fi
+          
+          # Determine which environments were deployed
+          ENVIRONMENTS=""
+          if [[ "${{ needs.deploy_dev.result }}" == "success" ]]; then
+            ENVIRONMENTS="$ENVIRONMENTS Development"
+          fi
+          if [[ "${{ needs.deploy_staging.result }}" == "success" ]]; then
+            ENVIRONMENTS="$ENVIRONMENTS Staging"
+          fi
+          if [[ "${{ needs.deploy_prod.result }}" == "success" ]]; then
+            ENVIRONMENTS="$ENVIRONMENTS Production"
+          fi
+          
+          echo "ENVIRONMENTS=$ENVIRONMENTS" >> $GITHUB_ENV
+          echo "COMMIT_SHA=${{ github.sha }}" >> $GITHUB_ENV
+          echo "COMMIT_URL=https://github.com/${{ github.repository }}/commit/${{ github.sha }}" >> $GITHUB_ENV
+          
+      - name: Send Slack notification
+        if: always()
+        uses: rtCamp/action-slack-notify@v2.0.0
+        env:
+          SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
+          SLACK_TITLE: ${{ env.NOTIFICATION_TITLE }}
+          SLACK_MESSAGE: "Deployment to ${{ env.ENVIRONMENTS }} - Commit: ${{ env.COMMIT_SHA }}"
+          SLACK_COLOR: ${{ env.NOTIFICATION_COLOR }}
+          
+      - name: Update deployment status
+        if: always()
+        uses: chrnorm/deployment-status@v1
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          state: ${{ steps.check.outputs.deployment_successful == 'true' && 'success' || 'failure' }}
+          deployment-id: ${{ github.run_id }}
+          description: Backend deployment ${{ steps.check.outputs.deployment_successful == 'true' && 'succeeded' || 'failed' }}
